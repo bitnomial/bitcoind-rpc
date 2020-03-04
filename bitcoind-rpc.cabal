@@ -1,0 +1,59 @@
+cabal-version:      2.4
+name:               bitcoind-rpc
+version:            0.1.0.0
+synopsis:           A streamlined interface to bitcoin core using Haskoin types and Servant
+homepage:           https://github.com/GambolingPangolin/bitcoind-rpc
+license:            ISC
+author:             Ian Shipman
+maintainer:         ics@gambolingpangolin.com
+build-type:         Simple
+extra-source-files: CHANGELOG.md
+
+common core
+    default-language: Haskell2010
+    build-depends:
+          base                          ^>=4.12
+        , haskoin-core                   >=0.9      && <0.12
+        , http-client                   ^>=0.6
+        , servant                        >=0.15     && <0.18
+        , servant-client                 >=0.15     && <0.18
+        , text                          ^>=1.2
+
+library
+    import:         core
+    hs-source-dirs: src/
+    ghc-options:    -Wall -Werror
+
+    exposed-modules:
+        Bitcoin.Core.RPC
+        Bitcoin.Core.RPC.Responses
+
+    other-modules:
+        Bitcoin.Core.RPC.Blockchain
+        Bitcoin.Core.RPC.Generating
+        Bitcoin.Core.RPC.Control
+        Bitcoin.Core.RPC.Network
+        Bitcoin.Core.RPC.Transactions
+        Servant.Bitcoind
+
+    build-depends:
+          aeson                         ^>=1.4
+        , bytestring                    ^>=0.10
+        , scientific                    ^>=0.3
+        , servant-jsonrpc-client        ^>=1.0
+        , time                           >=1.8      && <1.10
+        , transformers                  ^>=0.5
+
+
+test-suite bitcoind-rpc-tests
+    import:         core
+    type:           exitcode-stdio-1.0
+    main-is:        Main.hs
+    hs-source-dirs: test/
+    build-depends:
+          bitcoind-rpc
+        , cereal                        ^>=0.5
+        , process                       ^>=1.6
+        , tasty                         ^>=1.2
+        , tasty-hunit                   ^>=0.10
+        , temporary                     ^>=1.3
