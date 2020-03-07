@@ -6,6 +6,7 @@
 module Bitcoin.Core.RPC.Transactions
     ( getTransaction
     , sendRawTransaction
+    , sendTransaction
     , MempoolTestResult (..)
     , testMempoolAccept
     ) where
@@ -13,9 +14,11 @@ module Bitcoin.Core.RPC.Transactions
 import           Data.Aeson                  (FromJSON (..), withObject, (.:),
                                               (.:?))
 import           Data.Proxy                  (Proxy (..))
+import qualified Data.Serialize              as S
 import           Data.Text                   (Text)
 import           Network.Haskoin.Block       (BlockHash)
 import           Network.Haskoin.Transaction (Tx, TxHash)
+import           Network.Haskoin.Util        (encodeHex)
 import           Servant.API                 ((:<|>) (..))
 
 import           Servant.Bitcoind            (BitcoindClient, BitcoindEndpoint,
@@ -43,6 +46,11 @@ type RawTxRpc
 
 -- | Submit a raw transaction (serialized, hex-encoded) to local node and network.
 sendRawTransaction :: Text -> Maybe Double -> BitcoindClient TxHash
+
+
+-- | A version of 'sendRawTransaction' that handles serialization
+sendTransaction :: Tx -> Maybe Double -> BitcoindClient TxHash
+sendTransaction = sendRawTransaction . encodeHex . S.encode
 
 
 -- | By default this function only works for mempool transactions. When called

@@ -1,0 +1,3 @@
+packages:
+  bitcoind-rpc
+  bitcoind-regtest

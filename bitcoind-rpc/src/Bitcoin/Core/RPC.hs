@@ -17,6 +17,7 @@ module Bitcoin.Core.RPC
     -- * Transactions
     , getTransaction
     , sendRawTransaction
+    , sendTransaction
     , testMempoolAccept
 
     -- * Blocks

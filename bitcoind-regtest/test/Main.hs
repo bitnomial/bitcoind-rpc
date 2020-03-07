@@ -3,11 +3,9 @@
 
 module Main where
 
-import           Control.Concurrent          (threadDelay)
-import           Control.Exception           (bracket)
-import           Control.Monad               (void, (>=>))
-import qualified Data.Serialize              as S
+import           Control.Monad               (replicateM, void, (>=>))
 import           Data.Text                   (Text)
+import           Data.Word                   (Word64)
 import           Network.Haskoin.Address     (Address (..), addrToString,
                                               pubKeyAddr)
 import           Network.Haskoin.Block       (Block (..), BlockHash,
@@ -16,29 +14,21 @@ import           Network.Haskoin.Constants   (btcTest)
 import           Network.Haskoin.Crypto      (Hash160, SecKey)
 import           Network.Haskoin.Keys        (PubKeyI, derivePubKeyI, secKey,
                                               wrapSecKey)
-import           Network.Haskoin.Script      (ScriptOutput (..), sigHashAll)
-import           Network.Haskoin.Transaction (OutPoint (..), SigInput (..),
-                                              Tx (..), TxHash, TxOut (..),
-                                              buildAddrTx, signTx, txHash)
-import           Network.Haskoin.Util        (encodeHex)
+import           Network.Haskoin.Transaction (OutPoint (..), Tx (..), TxHash,
+                                              txHash)
 import           Network.HTTP.Client         (defaultManagerSettings,
                                               newManager)
-import           Servant.API                 (BasicAuthData)
-import           System.IO                   (Handle, IOMode (..), openFile)
-import           System.IO.Temp              (withSystemTempDirectory)
-import           System.Process              (CreateProcess (..), ProcessHandle,
-                                              StdStream (..), createProcess,
-                                              proc, terminateProcess,
-                                              waitForProcess)
 import           Test.Tasty                  (defaultMain)
 import           Test.Tasty.HUnit            (assertFailure, testCase)
 
+import           Bitcoin.Core.Regtest        (NodeHandle, withBitcoind)
+import qualified Bitcoin.Core.Regtest        as R
 import           Bitcoin.Core.RPC
 
 
 main :: IO ()
 main
-    = defaultMain . testCase "bitcoind-rpc" . withBitcoind
+    = defaultMain . testCase "bitcoind-rpc" . withBitcoind 8449
     $ bitcoindTests
         [ testRpc "generatetoaddress"     testGenerate
         , testRpc "getbestblockhash"      getBestBlockHash
@@ -53,6 +43,7 @@ main
         , testRpc "getrawmempool"         getRawMempool
         , testRpc "getrawtransaction"     testGetTransaction
         , testRpc "sendrawtransaction"    testSendTransaction
+        , testRpc "createOutput"          testCreateOutput
         , testRpc "getmempoolancestors"   testMempoolAncestors
         , testRpc "getmempooldescendants" testMempoolDescendants
         , testRpc "getpeerinfo"           getPeerInfo
@@ -107,14 +98,9 @@ testGetTransaction
 
 testSendTransaction :: BitcoindClient TxHash
 testSendTransaction = do
-    h   <- head <$> generateToAddress 120 addrText Nothing
-    tx0 <- head . blockTxns <$> getBlock h
-    let Right txSpec1 = buildAddrTx btcTest [outPoint] [(addrText, v - 10_000)]
-        TxOut v _     = head $ txOut tx0
-        outPoint      = OutPoint (txHash tx0) 0
-        sigInput      = SigInput (PayPKHash addrHash) v outPoint sigHashAll Nothing
-        Right tx1     = signTx btcTest txSpec1 [sigInput] [key]
-    sendRawTransaction (encodeHex $ S.encode tx1) Nothing
+    outp <- head <$> replicateM 101 R.generate
+    let Right (tx, _) = R.spendPackageOutputs [outp] (R.addrs !! 3) R.oneBitcoin
+    sendTransaction tx Nothing
 
 
 testMempoolAncestors :: BitcoindClient [TxHash]
@@ -122,17 +108,21 @@ testMempoolAncestors = testSendTransaction >>= getMempoolAncestors
 
 
 testMempoolDescendants :: BitcoindClient [TxHash]
-testMempoolDescendants = testSendTransaction >>= getMempoolDescendants
+testMempoolDescendants = testSendTransaction >>= getMempoolAncestors
+
+
+testCreateOutput :: BitcoindClient (OutPoint, Word64)
+testCreateOutput = R.createOutput (R.addrs !! 4) (2 * R.oneBitcoin)
 
 
 testRpc :: String -> BitcoindClient r -> (String, BitcoindClient ())
 testRpc name x = (name, void x)
 
 
-bitcoindTests :: [(String, BitcoindClient ())] -> BasicAuthData -> String -> Int -> IO ()
-bitcoindTests ts auth host port = do
+bitcoindTests :: [(String, BitcoindClient ())] -> NodeHandle -> IO ()
+bitcoindTests ts h = do
     mgr <- newManager defaultManagerSettings
-    let run msg = runBitcoind mgr host port auth >=> assertRight msg
+    let run msg = R.runBitcoind mgr h >=> assertRight msg
     mapM_ (uncurry run) ts
 
 
@@ -140,31 +130,3 @@ assertRight :: Show a => String -> Either a b -> IO b
 assertRight msg = either onFail return
     where
     onFail e = assertFailure $ msg <> " - " <> show e
-
-
-withBitcoind :: (BasicAuthData -> String -> Int -> IO r) -> IO r
-withBitcoind k = withSystemTempDirectory "bitcoind-rpc-tests" $ \dd ->
-    bracket (initBitcoind dd port) stopBitcoind . const $ do
-        auth <- basicAuthFromCookie $ dd <> "/regtest/.cookie"
-        k auth "127.0.0.1" port
-    where
-    port           = 8449
-    stopBitcoind h = terminateProcess h >> void (waitForProcess h)
-
-
-initBitcoind :: FilePath -> Int -> IO ProcessHandle
-initBitcoind ddir port = do
-    logH         <- openFile "/tmp/bitcoind-rpc.log" WriteMode
-    (_, _, _, h) <- createProcess $ bitcoind ddir port logH
-    threadDelay 1_000_000
-    return h
-
-
-bitcoind :: FilePath -> Int -> Handle -> CreateProcess
-bitcoind ddir port output
-    = (proc "bitcoind" args)
-      { std_out = UseHandle output
-      , std_err = UseHandle output
-      }
-    where
-    args = ["-regtest", "-txindex", "-disablewallet", "-datadir=" <> ddir, "-rpcport=" <> show port]
