@@ -27,7 +27,6 @@ common core
 library
     import:         core
     hs-source-dirs: src/
-    ghc-options:    -Werror
 
     exposed-modules:
         Bitcoin.Core.Regtest

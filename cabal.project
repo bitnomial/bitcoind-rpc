@@ -1,3 +1,9 @@
 packages:
   bitcoind-rpc
   bitcoind-regtest
+
+package bitcoind-rpc
+  ghc-options: -Werror
+
+package bitcoind-regtest
+  ghc-options: -Werror
