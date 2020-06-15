@@ -63,7 +63,7 @@ import Haskoin.Util (encodeHex, maybeToEither)
 import Network.HTTP.Client (Manager)
 import Servant.API (BasicAuthData)
 import System.IO (Handle, IOMode (..), openFile)
-import System.IO.Temp (withSystemTempDirectory)
+import System.IO.Temp (getCanonicalTemporaryDirectory, withSystemTempDirectory)
 import System.Process (
     CreateProcess (..),
     ProcessHandle,
@@ -85,11 +85,13 @@ import qualified Bitcoin.Core.RPC as RPC
 data NodeHandle = NodeHandle
     { nodePort :: Int
     , nodeAuth :: BasicAuthData
+    , nodeRawTx :: FilePath
+    , nodeRawBlock :: FilePath
     }
 
 -- | Run an RPC computation with an ephemeral node
 runBitcoind :: Manager -> NodeHandle -> BitcoindClient r -> IO (Either BitcoindException r)
-runBitcoind mgr (NodeHandle port auth) = RPC.runBitcoind mgr "127.0.0.1" port auth
+runBitcoind mgr (NodeHandle port auth _ _) = RPC.runBitcoind mgr "127.0.0.1" port auth
 
 -- | Provide bracketed access to a fresh ephemeral node
 withBitcoind ::
@@ -97,28 +99,43 @@ withBitcoind ::
     Int ->
     (NodeHandle -> IO r) ->
     IO r
-withBitcoind port k = withSystemTempDirectory "bitcoind-rpc-tests" $ \dd ->
-    bracket (initBitcoind dd port) stopBitcoind . const $ do
+withBitcoind port k = withSystemTempDirectory "bitcoind-rpc-tests" $ \dd -> do
+    tmp <- getCanonicalTemporaryDirectory
+    bracket (initBitcoind tmp dd port) stopBitcoind . const $ do
         auth <- basicAuthFromCookie $ dd <> "/regtest/.cookie"
-        k $ NodeHandle port auth
+        k $ NodeHandle port auth (rawTxSocket tmp) (rawBlockSocket tmp)
 
-initBitcoind :: FilePath -> Int -> IO ProcessHandle
-initBitcoind ddir port = do
-    logH <- openFile "/tmp/bitcoind-rpc.log" WriteMode
-    (_, _, _, h) <- createProcess $ bitcoind ddir port logH
+initBitcoind :: FilePath -> FilePath -> Int -> IO ProcessHandle
+initBitcoind tmp ddir port = do
+    logH <- openFile (tmp <> "/bitcoind-rpc.log") WriteMode
+    (_, _, _, h) <- createProcess $ bitcoind tmp ddir port logH
     h <$ threadDelay 1_000_000
 
 stopBitcoind :: ProcessHandle -> IO ()
 stopBitcoind h = terminateProcess h >> void (waitForProcess h)
 
-bitcoind :: FilePath -> Int -> Handle -> CreateProcess
-bitcoind ddir port output =
+bitcoind :: FilePath -> FilePath -> Int -> Handle -> CreateProcess
+bitcoind tmp ddir port output =
     (proc "bitcoind" args)
         { std_out = UseHandle output
         , std_err = UseHandle output
         }
   where
-    args = ["-regtest", "-txindex", "-disablewallet", "-datadir=" <> ddir, "-rpcport=" <> show port]
+    args =
+        [ "-regtest"
+        , "-txindex"
+        , "-disablewallet"
+        , "-datadir=" <> ddir
+        , "-rpcport=" <> show port
+        , "-zmqpubrawblock=" <> rawBlockSocket tmp
+        , "-zmqpubrawtx=" <> rawTxSocket tmp
+        ]
+
+rawTxSocket :: FilePath -> String
+rawTxSocket tmp = "ipc://" <> tmp <> "/bitcoind-rpc.tx.raw"
+
+rawBlockSocket :: FilePath -> String
+rawBlockSocket tmp = "ipc://" <> tmp <> "/bitcoind-rpc.block.raw"
 
 oneBitcoin :: Word64
 oneBitcoin = 100_000_000
