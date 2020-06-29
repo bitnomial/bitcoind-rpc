@@ -38,13 +38,13 @@ import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Data.Time (NominalDiffTime, UTCTime)
 import Data.Word (Word16, Word32)
-import Network.Haskoin.Block (
+import Haskoin.Block (
     Block,
     BlockHash,
     BlockHeader,
     BlockHeight,
  )
-import Network.Haskoin.Transaction (TxHash)
+import Haskoin.Transaction (TxHash)
 import Servant.API ((:<|>) (..))
 
 import Servant.Bitcoind (

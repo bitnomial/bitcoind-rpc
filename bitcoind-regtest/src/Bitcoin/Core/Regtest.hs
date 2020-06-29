@@ -31,16 +31,15 @@ import Control.Monad (void)
 import qualified Data.Serialize as S
 import Data.Text (Text)
 import Data.Word (Word64)
-import Network.HTTP.Client (Manager)
-import Network.Haskoin.Address (
+import Haskoin.Address (
     Address,
-    addrToString,
+    addrToText,
     addressToOutput,
  )
-import Network.Haskoin.Block (blockTxns)
-import Network.Haskoin.Constants (btcTest)
-import Network.Haskoin.Crypto (SecKey)
-import Network.Haskoin.Keys (
+import Haskoin.Block (blockTxns)
+import Haskoin.Constants (btcTest)
+import Haskoin.Crypto (SecKey)
+import Haskoin.Keys (
     PubKeyI,
     XPrvKey (..),
     deriveAddrs,
@@ -50,8 +49,8 @@ import Network.Haskoin.Keys (
     prvSubKeys,
     wrapSecKey,
  )
-import Network.Haskoin.Script (sigHashAll)
-import Network.Haskoin.Transaction (
+import Haskoin.Script (sigHashAll)
+import Haskoin.Transaction (
     OutPoint (..),
     SigInput (..),
     Tx (..),
@@ -60,7 +59,8 @@ import Network.Haskoin.Transaction (
     signTx,
     txHash,
  )
-import Network.Haskoin.Util (encodeHex, maybeToEither)
+import Haskoin.Util (encodeHex, maybeToEither)
+import Network.HTTP.Client (Manager)
 import Servant.API (BasicAuthData)
 import System.IO (Handle, IOMode (..), openFile)
 import System.IO.Temp (withSystemTempDirectory)
@@ -173,7 +173,7 @@ spendPackageOutputs ::
     Word64 ->
     Either String (Tx, Word64)
 spendPackageOutputs inputs addr vTarget = do
-    addrText <- maybeToEither "Addr conversion failed" $ addrToString btcTest addr
+    addrText <- maybeToEither "Addr conversion failed" $ addrToText btcTest addr
 
     let outSpec
             | vTarget + 10_000 < vAvail =
@@ -217,9 +217,9 @@ addr0 : _ = addrs
 
 -- | Text versions of the example addresses
 textAddrs :: [Text]
-textAddrs = addrToString' <$> addrs
+textAddrs = addrToText' <$> addrs
   where
-    addrToString' a = let Just x = addrToString btcTest a in x
+    addrToText' a = let Just x = addrToText btcTest a in x
 
 textAddr0, textAddr1, textAddr2 :: Text
 textAddr0 : textAddr1 : textAddr2 : _ = textAddrs

@@ -6,33 +6,33 @@ module Main where
 import Control.Monad (replicateM, void, (>=>))
 import Data.Text (Text)
 import Data.Word (Word64)
-import Network.HTTP.Client (
-    defaultManagerSettings,
-    newManager,
- )
-import Network.Haskoin.Address (
+import Haskoin.Address (
     Address (..),
-    addrToString,
+    addrToText,
     pubKeyAddr,
  )
-import Network.Haskoin.Block (
+import Haskoin.Block (
     Block (..),
     BlockHash,
     BlockHeader,
  )
-import Network.Haskoin.Constants (btcTest)
-import Network.Haskoin.Crypto (Hash160, SecKey)
-import Network.Haskoin.Keys (
+import Haskoin.Constants (btcTest)
+import Haskoin.Crypto (Hash160, SecKey)
+import Haskoin.Keys (
     PubKeyI,
     derivePubKeyI,
     secKey,
     wrapSecKey,
  )
-import Network.Haskoin.Transaction (
+import Haskoin.Transaction (
     OutPoint (..),
     Tx (..),
     TxHash,
     txHash,
+ )
+import Network.HTTP.Client (
+    defaultManagerSettings,
+    newManager,
  )
 import Test.Tasty (defaultMain)
 import Test.Tasty.HUnit (assertFailure, testCase)
@@ -86,7 +86,7 @@ addrHash :: Hash160
 addr@(PubKeyAddress addrHash) = pubKeyAddr pk
 
 addrText :: Text
-Just addrText = addrToString btcTest addr
+Just addrText = addrToText btcTest addr
 
 testBlock :: BitcoindClient Block
 testBlock = getBestBlockHash >>= getBlock

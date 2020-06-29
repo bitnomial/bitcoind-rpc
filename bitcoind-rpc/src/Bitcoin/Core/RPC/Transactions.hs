@@ -20,9 +20,9 @@ import Data.Aeson (
 import Data.Proxy (Proxy (..))
 import qualified Data.Serialize as S
 import Data.Text (Text)
-import Network.Haskoin.Block (BlockHash)
-import Network.Haskoin.Transaction (Tx, TxHash)
-import Network.Haskoin.Util (encodeHex)
+import Haskoin.Block (BlockHash)
+import Haskoin.Transaction (Tx, TxHash)
+import Haskoin.Util (encodeHex)
 import Servant.API ((:<|>) (..))
 
 import Servant.Bitcoind (

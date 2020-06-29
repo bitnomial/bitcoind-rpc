@@ -34,7 +34,7 @@ import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Time (NominalDiffTime, UTCTime)
 import Data.Word (Word16, Word32, Word64)
-import Network.Haskoin.Block (BlockHeight)
+import Haskoin.Block (BlockHeight)
 import Servant.API ((:<|>) (..))
 
 import Servant.Bitcoind (

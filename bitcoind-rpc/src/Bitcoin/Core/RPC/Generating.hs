@@ -11,7 +11,7 @@ module Bitcoin.Core.RPC.Generating (
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Word (Word32)
-import Network.Haskoin.Block (BlockHash)
+import Haskoin.Block (BlockHash)
 
 import Servant.Bitcoind (
     BitcoindClient,
