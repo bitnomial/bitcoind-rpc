@@ -6,16 +6,8 @@ module Main where
 import Control.Monad (replicateM, void, (>=>))
 import Data.Text (Text)
 import Data.Word (Word64)
-import Haskoin.Address (
-    Address (..),
-    addrToText,
-    pubKeyAddr,
- )
-import Haskoin.Block (
-    Block (..),
-    BlockHash,
-    BlockHeader,
- )
+import Haskoin.Address (Address (..), addrToText, pubKeyAddr)
+import Haskoin.Block (Block (..), BlockHash)
 import Haskoin.Constants (btcTest)
 import Haskoin.Crypto (Hash160, SecKey)
 import Haskoin.Keys (
@@ -24,20 +16,11 @@ import Haskoin.Keys (
     secKey,
     wrapSecKey,
  )
-import Haskoin.Transaction (
-    OutPoint (..),
-    Tx (..),
-    TxHash,
-    txHash,
- )
-import Network.HTTP.Client (
-    defaultManagerSettings,
-    newManager,
- )
+import Haskoin.Transaction (OutPoint (..), Tx (..), TxHash, txHash)
+import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Test.Tasty (defaultMain)
 import Test.Tasty.HUnit (assertFailure, testCase)
 
-import Bitcoin.Core.RPC
 import Bitcoin.Core.Regtest (NodeHandle, withBitcoind)
 import qualified Bitcoin.Core.Regtest as R
 

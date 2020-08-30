@@ -21,6 +21,7 @@ module Servant.Bitcoind (
     EmptyString,
     EmptyList,
     DefFalse,
+    DefTrue,
     DefZero,
 
     -- * Types related to the client
@@ -35,21 +36,31 @@ module Servant.Bitcoind (
     -- * Utility functions
     utcTime,
     toSatoshis,
+    decodeFromHex,
+    HexEncoded (..),
 ) where
 
 import Control.Exception (Exception)
+import Control.Monad ((>=>))
 import Control.Monad.Trans.Except (ExceptT (..))
 import Control.Monad.Trans.Reader (ReaderT (..))
-import Data.Aeson (FromJSON (..), ToJSON (..), Value)
+import Data.Aeson (
+    FromJSON (..),
+    ToJSON (..),
+    Value,
+    withText,
+ )
 import qualified Data.Aeson.Types as Ae
 import Data.Bifunctor (first)
 import Data.Proxy (Proxy (..))
 import Data.Scientific (Scientific)
+import Data.Serialize (Serialize, decode)
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word (Word32, Word64)
 import GHC.TypeLits (KnownSymbol, Symbol)
+import Haskoin.Util (decodeHex)
 import Servant.API ((:<|>) (..), (:>))
 import Servant.API.BasicAuth (BasicAuth, BasicAuthData)
 import Servant.Client (ClientError, ClientM, client)
@@ -96,6 +107,10 @@ instance HasDefault EmptyString Text where getDefault _ = ""
 data DefFalse
 
 instance HasDefault DefFalse Bool where getDefault _ = False
+
+data DefTrue
+
+instance HasDefault DefTrue Bool where getDefault _ = True
 
 data EmptyList
 
@@ -217,3 +232,12 @@ utcTime = posixSecondsToUTCTime . fromIntegral
 -- | Convert BTC to Satoshis
 toSatoshis :: Scientific -> Word32
 toSatoshis = floor . (* 100_000_000)
+
+-- | Read a serializable from a hex string
+decodeFromHex :: Serialize a => Text -> Either String a
+decodeFromHex = maybe (Left "Invalid hex") Right . decodeHex >=> decode
+
+newtype HexEncoded a = HexEncoded {unHexEncoded :: a} deriving (Eq, Show)
+
+instance Serialize a => FromJSON (HexEncoded a) where
+    parseJSON = withText "HexEncoded" $ either fail (return . HexEncoded) . decodeFromHex

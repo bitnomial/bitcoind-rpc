@@ -11,12 +11,7 @@ module Bitcoin.Core.RPC.Transactions (
     testMempoolAccept,
 ) where
 
-import Data.Aeson (
-    FromJSON (..),
-    withObject,
-    (.:),
-    (.:?),
- )
+import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
 import Data.Proxy (Proxy (..))
 import qualified Data.Serialize as S
 import Data.Text (Text)
@@ -31,6 +26,7 @@ import Servant.Bitcoind (
     C,
     DefFalse,
     F,
+    HexEncoded (..),
     I,
     O,
     toBitcoindClient,
@@ -49,7 +45,7 @@ instance FromJSON MempoolTestResult where
 
 type RawTxRpc =
     BitcoindEndpoint "sendrawtransaction" (I Text -> O Double -> C TxHash)
-        :<|> BitcoindEndpoint "getrawtransaction" (I TxHash -> F DefFalse Bool -> O BlockHash -> C Tx)
+        :<|> BitcoindEndpoint "getrawtransaction" (I TxHash -> F DefFalse Bool -> O BlockHash -> C (HexEncoded Tx))
         :<|> BitcoindEndpoint "testmempoolaccept" (I [Tx] -> O Double -> C [MempoolTestResult])
 
 -- | Submit a raw transaction (serialized, hex-encoded) to local node and network.
@@ -59,6 +55,15 @@ sendRawTransaction :: Text -> Maybe Double -> BitcoindClient TxHash
 sendTransaction :: Tx -> Maybe Double -> BitcoindClient TxHash
 sendTransaction = sendRawTransaction . encodeHex . S.encode
 
+getTransaction' :: TxHash -> Maybe BlockHash -> BitcoindClient (HexEncoded Tx)
+
+{- | Returns result of mempool acceptance tests indicating if the transactions
+ would be accepted by mempool.  This checks if the transaction violates the
+ consensus or policy rules.
+-}
+testMempoolAccept :: [Tx] -> Maybe Double -> BitcoindClient [MempoolTestResult]
+sendRawTransaction :<|> getTransaction' :<|> testMempoolAccept = toBitcoindClient $ Proxy @RawTxRpc
+
 {- | By default this function only works for mempool transactions. When called
  with a blockhash argument, getrawtransaction will return the transaction if
  the specified block is available and the transaction is found in that block.
@@ -67,10 +72,4 @@ sendTransaction = sendRawTransaction . encodeHex . S.encode
  transaction is in a block in the blockchain.
 -}
 getTransaction :: TxHash -> Maybe BlockHash -> BitcoindClient Tx
-
-{- | Returns result of mempool acceptance tests indicating if the transactions
- would be accepted by mempool.  This checks if the transaction violates the
- consensus or policy rules.
--}
-testMempoolAccept :: [Tx] -> Maybe Double -> BitcoindClient [MempoolTestResult]
-sendRawTransaction :<|> getTransaction :<|> testMempoolAccept = toBitcoindClient $ Proxy @RawTxRpc
+getTransaction h = fmap unHexEncoded . getTransaction' h

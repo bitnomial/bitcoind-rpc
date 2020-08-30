@@ -10,6 +10,7 @@ module Bitcoin.Core.RPC.Blockchain (
     getBlock,
     getBlockCount,
     getBlockHash,
+    BlockHeader (..),
     getBlockHeader,
     BlockStats (..),
     getBlockStats,
@@ -37,13 +38,9 @@ import Data.Proxy (Proxy (..))
 import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Data.Time (NominalDiffTime, UTCTime)
-import Data.Word (Word16, Word32)
-import Haskoin.Block (
-    Block,
-    BlockHash,
-    BlockHeader,
-    BlockHeight,
- )
+import Data.Word (Word16, Word32, Word64)
+import Haskoin.Block (Block, BlockHash, BlockHeight)
+import Haskoin.Crypto (Hash256)
 import Haskoin.Transaction (TxHash)
 import Servant.API ((:<|>) (..))
 
@@ -52,10 +49,13 @@ import Servant.Bitcoind (
     BitcoindEndpoint,
     C,
     DefFalse,
+    DefTrue,
     DefZero,
     F,
+    HexEncoded (..),
     I,
     O,
+    decodeFromHex,
     toBitcoindClient,
     toSatoshis,
     utcTime,
@@ -114,6 +114,33 @@ instance FromJSON BlockStats where
             <*> o .: "txs"
             <*> o .: "utxo_increase"
             <*> o .: "utxo_size_inc"
+
+data BlockHeader = BlockHeader
+    { blockHeaderHash :: BlockHash
+    , blockHeaderConfs :: Word32
+    , blockHeaderHeight :: BlockHeight
+    , blockHeaderMerkleRoot :: Hash256
+    , blockHeaderTime :: UTCTime
+    , blockHeaderMedianTime :: UTCTime
+    , blockHeaderNonce :: Word64
+    , blockHeaderTxCount :: Int
+    , blockHeaderPrevHash :: Hash256
+    }
+
+instance FromJSON BlockHeader where
+    parseJSON = withObject "BlockHeader" $ \o ->
+        BlockHeader
+            <$> o .: "hash"
+            <*> o .: "confirmations"
+            <*> o .: "height"
+            <*> (o .: "merkleroot" >>= parseFromHex)
+            <*> (utcTime <$> o .: "time")
+            <*> (utcTime <$> o .: "mediantime")
+            <*> o .: "nonce"
+            <*> o .: "nTx"
+            <*> (o .: "previousblockhash" >>= parseFromHex)
+      where
+        parseFromHex = either fail return . decodeFromHex
 
 data ChainTipStatus = Invalid | HeadersOnly | ValidHeaders | ValidFork | Active
     deriving (Eq, Show)
@@ -189,10 +216,10 @@ instance FromJSON MempoolInfo where
 
 type BlockchainRpc =
     BitcoindEndpoint "getbestblockhash" (C BlockHash)
-        :<|> BitcoindEndpoint "getblock" (I BlockHash -> F DefZero Int -> C Block)
+        :<|> BitcoindEndpoint "getblock" (I BlockHash -> F DefZero Int -> C (HexEncoded Block))
         :<|> BitcoindEndpoint "getblockcount" (C Word32)
         :<|> BitcoindEndpoint "getblockhash" (I BlockHeight -> C BlockHash)
-        :<|> BitcoindEndpoint "getblockheader" (I BlockHash -> F DefFalse Bool -> C BlockHeader)
+        :<|> BitcoindEndpoint "getblockheader" (I BlockHash -> F DefTrue Bool -> C BlockHeader)
         :<|> BitcoindEndpoint "getblockstats" (I BlockHash -> O [Text] -> C BlockStats)
         :<|> BitcoindEndpoint "getchaintips" (C [ChainTip])
         :<|> BitcoindEndpoint "getchaintxstats" (O Word32 -> O BlockHash -> C ChainTxStats)
@@ -204,9 +231,7 @@ type BlockchainRpc =
 
 -- | Returns the hash of the best (tip) block in the most-work fully-validated chain.
 getBestBlockHash :: BitcoindClient BlockHash
-
--- | Produce the block corresponding to the given 'BlockHash' if it exists.
-getBlock :: BlockHash -> BitcoindClient Block
+getBlock' :: BlockHash -> BitcoindClient (HexEncoded Block)
 
 -- | Returns the height of the most-work fully-validated chain.  The genesis block has height 0.
 getBlockCount :: BitcoindClient Word32
@@ -241,7 +266,7 @@ getMempoolInfo :: BitcoindClient MempoolInfo
 -- | Returns all transaction ids in memory pool.
 getRawMempool :: BitcoindClient [TxHash]
 getBestBlockHash
-    :<|> getBlock
+    :<|> getBlock'
     :<|> getBlockCount
     :<|> getBlockHash
     :<|> getBlockHeader
@@ -260,3 +285,7 @@ getBestBlockHash
 -}
 getBlockStats :: BlockHash -> BitcoindClient BlockStats
 getBlockStats h = getBlockStats' h Nothing
+
+-- | Produce the block corresponding to the given 'BlockHash' if it exists.
+getBlock :: BlockHash -> BitcoindClient Block
+getBlock = fmap unHexEncoded . getBlock'
