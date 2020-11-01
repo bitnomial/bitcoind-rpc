@@ -16,7 +16,7 @@ common core
     ghc-options:      -Wall -fno-warn-unused-do-bind
     build-depends:
           base                           >=4.12     && <4.15
-        , bitcoind-rpc
+        , bitcoind-rpc                  ^>=0.2
         , cereal                        ^>=0.5
         , haskoin-core                   >=0.15     && <0.18
         , http-client                    >=0.6      && <0.8
