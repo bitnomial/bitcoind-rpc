@@ -33,3 +33,15 @@ Test suite
 ----
 
 The test suite is in `bitcoind-regtest`, and only runs on Linux.
+
+
+Development
+----
+
+```sh
+git clone https://github.com/bitnomial/bitcoind-rpc
+cd bitcoind-rpc
+cabal build all && cabal test all
+```
+
+Please use `ormolu` or `fourmolu` (with the default configuration) for code formatting.

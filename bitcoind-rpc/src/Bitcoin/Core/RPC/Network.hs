@@ -1,64 +1,73 @@
-{-# LANGUAGE DataKinds         #-}
-{-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications  #-}
-{-# LANGUAGE TypeOperators     #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 
-module Bitcoin.Core.RPC.Network
-    ( Command (..)
-    , addNode
-    , clearBanned
-    , disconnectNode
-    , NodeInfo (..)
-    , NodeInfoAddress (..)
-    , ConnDir (..)
-    , getAddedNodeInfo
-    , getConnectionCount
-    , NetTotals (..)
-    , getNetTotals
-    , NodeAddress (..)
-    , getNodeAddresses
-    , PeerInfo (..)
-    , getPeerInfo
-    , listBanned
-    ) where
+module Bitcoin.Core.RPC.Network (
+    Command (..),
+    addNode,
+    clearBanned,
+    disconnectNode,
+    NodeInfo (..),
+    NodeInfoAddress (..),
+    ConnDir (..),
+    getAddedNodeInfo,
+    getConnectionCount,
+    NetTotals (..),
+    getNetTotals,
+    NodeAddress (..),
+    getNodeAddresses,
+    PeerInfo (..),
+    getPeerInfo,
+    listBanned,
+) where
 
-import           Data.Aeson            (FromJSON (..), ToJSON (..), withObject,
-                                        withText, (.:))
-import           Data.Proxy            (Proxy (..))
-import           Data.Text             (Text)
-import           Data.Time             (NominalDiffTime, UTCTime)
-import           Data.Word             (Word16, Word32, Word64)
-import           Network.Haskoin.Block (BlockHeight)
-import           Servant.API           ((:<|>) (..))
+import Data.Aeson (
+    FromJSON (..),
+    ToJSON (..),
+    withObject,
+    withText,
+    (.:),
+ )
+import Data.Proxy (Proxy (..))
+import Data.Text (Text)
+import Data.Time (NominalDiffTime, UTCTime)
+import Data.Word (Word16, Word32, Word64)
+import Network.Haskoin.Block (BlockHeight)
+import Servant.API ((:<|>) (..))
 
-import           Servant.Bitcoind      (BitcoindClient, BitcoindEndpoint, C, CX,
-                                        I, O, toBitcoindClient, toSatoshis,
-                                        utcTime)
-
+import Servant.Bitcoind (
+    BitcoindClient,
+    BitcoindEndpoint,
+    C,
+    CX,
+    I,
+    O,
+    toBitcoindClient,
+    toSatoshis,
+    utcTime,
+ )
 
 -- | Commands as understood by 'addNode'
 data Command = Add | Remove | OneTry deriving (Eq, Show, Enum)
 
-
 commandText :: Command -> Text
 commandText = \case
-    Add    -> "add"
+    Add -> "add"
     Remove -> "remove"
     OneTry -> "onetry"
-
 
 instance ToJSON Command where
     toJSON = toJSON . commandText
 
-
 data NodeAddress = NodeAddress
-    { addrTime     :: UTCTime
+    { addrTime :: UTCTime
     , addrServices :: Word64
-    , addrHost     :: Text
-    , addrPort     :: Word32
-    } deriving (Eq, Show)
-
+    , addrHost :: Text
+    , addrPort :: Word32
+    }
+    deriving (Eq, Show)
 
 instance FromJSON NodeAddress where
     parseJSON = withObject "NodeAddress" $ \o ->
@@ -68,79 +77,73 @@ instance FromJSON NodeAddress where
             <*> o .: "address"
             <*> o .: "port"
 
-
 data ConnDir = Inbound | Outbound deriving (Eq, Show, Enum)
-
 
 instance FromJSON ConnDir where
     parseJSON = withText "ConnDir" fromText
-        where
+      where
         fromText t
-            | t == "inbound"  = return Inbound
+            | t == "inbound" = return Inbound
             | t == "outbound" = return Outbound
-            | otherwise       = fail "Unable to decode connection direction"
-
+            | otherwise = fail "Unable to decode connection direction"
 
 data NodeInfoAddress = NodeInfoAddress
     { nodeInfoAddress :: Text
-    , connDirection   :: ConnDir
-    } deriving (Eq, Show)
-
+    , connDirection :: ConnDir
+    }
+    deriving (Eq, Show)
 
 instance FromJSON NodeInfoAddress where
     parseJSON = withObject "NodeInfoAddress" $ \o ->
         NodeInfoAddress <$> o .: "address" <*> o .: "connected"
 
-
 data NodeInfo = NodeInfo
     { addedNode :: Text
     , connected :: Bool
     , addresses :: [NodeInfoAddress]
-    } deriving (Eq, Show)
-
+    }
+    deriving (Eq, Show)
 
 instance FromJSON NodeInfo where
     parseJSON = withObject "NodeInfo" $ \o ->
         NodeInfo <$> o .: "addednode" <*> o .: "connected" <*> o .: "addresses"
 
-
 data NetTotals = NetTotals
     { bytesReceived :: Word64
-    , bytesSent     :: Word64
-    } deriving (Eq, Show)
-
+    , bytesSent :: Word64
+    }
+    deriving (Eq, Show)
 
 instance FromJSON NetTotals where
     parseJSON = withObject "NetTotals" $ \o ->
         NetTotals <$> o .: "totalbytesrecv" <*> o .: "totalbytessent"
 
-
 data PeerInfo = PeerInfo
-    { peerIndex      :: Word16
-    , peerAddr       :: Text
-    , peerBind       :: Text
-    , services       :: Text
-    , relay          :: Bool
-    , lastSend       :: UTCTime
-    , lastRecv       :: UTCTime
-    , peerBytesSent  :: Word64
-    , peerBytesRecv  :: Word64
-    , connTime       :: UTCTime
-    , timeOffset     :: NominalDiffTime
-    , pingTime       :: Maybe Double
-    , version        :: Word64
-    , inbound        :: Bool
-    , addnode        :: Bool
+    { peerIndex :: Word16
+    , peerAddr :: Text
+    , peerBind :: Text
+    , services :: Text
+    , relay :: Bool
+    , lastSend :: UTCTime
+    , lastRecv :: UTCTime
+    , peerBytesSent :: Word64
+    , peerBytesRecv :: Word64
+    , connTime :: UTCTime
+    , timeOffset :: NominalDiffTime
+    , pingTime :: Maybe Double
+    , version :: Word64
+    , inbound :: Bool
+    , addnode :: Bool
     , startingHeight :: BlockHeight
-    , banScore       :: Word16
-    , syncedHeaders  :: Word32
-    , syncedBlocks   :: Word32
-    , inflight       :: [BlockHeight]
-    , whitelisted    :: Bool
-    , minFeeFilter   :: Word32
-    -- ^ in satoshis
-    } deriving (Eq, Show)
-
+    , banScore :: Word16
+    , syncedHeaders :: Word32
+    , syncedBlocks :: Word32
+    , inflight :: [BlockHeight]
+    , whitelisted :: Bool
+    , -- | in satoshis
+      minFeeFilter :: Word32
+    }
+    deriving (Eq, Show)
 
 instance FromJSON PeerInfo where
     parseJSON = withObject "PeerInfo" $ \o ->
@@ -168,70 +171,63 @@ instance FromJSON PeerInfo where
             <*> o .: "whitelisted"
             <*> (toSatoshis <$> o .: "minfeefilter")
 
+type NetworkRpc =
+    BitcoindEndpoint "addnode" (I Text -> I Command -> CX)
+        :<|> BitcoindEndpoint "clearbanned" CX
+        :<|> BitcoindEndpoint "disconnectnode" (I Text -> CX)
+        :<|> BitcoindEndpoint "getaddednodeinfo" (O Text -> C [NodeInfo])
+        :<|> BitcoindEndpoint "getconnectioncount" (C Word16)
+        :<|> BitcoindEndpoint "getnettotals" (C NetTotals)
+        :<|> BitcoindEndpoint "getnodeaddresses" (O Word32 -> C [NodeAddress])
+        :<|> BitcoindEndpoint "getpeerinfo" (C [PeerInfo])
+        :<|> BitcoindEndpoint "listbanned" (C [Text])
 
-type NetworkRpc
-    =    BitcoindEndpoint "addnode" (I Text -> I Command -> CX)
-    :<|> BitcoindEndpoint "clearbanned" CX
-    :<|> BitcoindEndpoint "disconnectnode" (I Text -> CX)
-    :<|> BitcoindEndpoint "getaddednodeinfo" (O Text -> C [NodeInfo])
-    :<|> BitcoindEndpoint "getconnectioncount" (C Word16)
-    :<|> BitcoindEndpoint "getnettotals" (C NetTotals)
-    :<|> BitcoindEndpoint "getnodeaddresses" (O Word32 -> C [NodeAddress])
-    :<|> BitcoindEndpoint "getpeerinfo" (C [PeerInfo])
-    :<|> BitcoindEndpoint "listbanned" (C [Text])
-
-
--- | Attempts to add or remove a node from the addnode list; or try a
--- connection to a node once.  Nodes added using addnode are protected from DoS
--- disconnection and are not required to be full nodes/support SegWit as other
--- outbound peers are (though such peers will not be synced from).
-addNode
-    :: Text
-    -- ^ node address @host:port@
-    -> Command
-    -> BitcoindClient ()
-
+{- | Attempts to add or remove a node from the addnode list; or try a
+ connection to a node once.  Nodes added using addnode are protected from DoS
+ disconnection and are not required to be full nodes/support SegWit as other
+ outbound peers are (though such peers will not be synced from).
+-}
+addNode ::
+    -- | node address @host:port@
+    Text ->
+    Command ->
+    BitcoindClient ()
 
 -- | Clear all banned IPs.
 clearBanned :: BitcoindClient ()
 
-
 -- | Immediately disconnects from the specified peer node.
-disconnectNode
-    :: Text
-    -- ^ node address @host:port@
-    -> BitcoindClient ()
+disconnectNode ::
+    -- | node address @host:port@
+    Text ->
+    BitcoindClient ()
 
--- | Returns information about the given added node, or all added nodes (note
--- that onetry addnodes are not listed here)
-getAddedNodeInfo
-    :: Maybe Text
-    -- ^ optionally specify a node by address
-    -> BitcoindClient [NodeInfo]
-
+{- | Returns information about the given added node, or all added nodes (note
+ that onetry addnodes are not listed here)
+-}
+getAddedNodeInfo ::
+    -- | optionally specify a node by address
+    Maybe Text ->
+    BitcoindClient [NodeInfo]
 
 -- | Returns the number of connections to other nodes.
 getConnectionCount :: BitcoindClient Word16
 
-
--- | Returns information about network traffic, including bytes in, bytes out,
--- and current time.
+{- | Returns information about network traffic, including bytes in, bytes out,
+ and current time.
+-}
 getNetTotals :: BitcoindClient NetTotals
 
-
--- | Return known addresses which can potentially be used to find new nodes in
--- the network
+{- | Return known addresses which can potentially be used to find new nodes in
+ the network
+-}
 getNodeAddresses :: Maybe Word32 -> BitcoindClient [NodeAddress]
-
 
 -- | Returns data about each connected network node.
 getPeerInfo :: BitcoindClient [PeerInfo]
 
-
 -- | List all banned IPs/Subnets.
 listBanned :: BitcoindClient [Text]
-
-
 addNode
     :<|> clearBanned
     :<|> disconnectNode
@@ -240,5 +236,5 @@ addNode
     :<|> getNetTotals
     :<|> getNodeAddresses
     :<|> getPeerInfo
-    :<|> listBanned
-    = toBitcoindClient $ Proxy @NetworkRpc
+    :<|> listBanned =
+        toBitcoindClient $ Proxy @NetworkRpc
