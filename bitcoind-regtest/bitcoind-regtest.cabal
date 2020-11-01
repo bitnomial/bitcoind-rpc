@@ -18,7 +18,7 @@ common core
           base                           >=4.12     && <4.15
         , bitcoind-rpc
         , cereal                        ^>=0.5
-        , haskoin-core                  ^>=0.15
+        , haskoin-core                   >=0.15     && <0.18
         , http-client                    >=0.6      && <0.8
         , process                       ^>=1.6
         , servant                        >=0.15     && <0.19
@@ -43,7 +43,7 @@ executable bitcoind-rpc-explorer
     build-depends:
           bitcoind-regtest
         , bytestring           >=0.10 && <0.12
-        , optparse-applicative >=0.14 && <0.16
+        , optparse-applicative >=0.14 && <0.17
 
 
 test-suite bitcoind-rpc-tests

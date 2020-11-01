@@ -43,5 +43,5 @@ library
         , servant-client                 >=0.15     && <0.19
         , servant-jsonrpc-client         >=1.0      && <1.2
         , text                          ^>=1.2
-        , time                           >=1.8      && <1.11
+        , time                           >=1.8      && <1.12
         , transformers                  ^>=0.5
