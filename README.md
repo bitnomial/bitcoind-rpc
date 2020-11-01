@@ -25,14 +25,26 @@ This package provides some tooling for testing a bitcoin-core integration.  Feat
 Supported bitcoin-core versions
 ----
 
-`bitcoind ==0.19.0.1`
-
+* `v0.19.1`
+* `v0.20.0`
+* `v0.20.1`
 
 
 Test suite
 ----
 
-The test suite is in `bitcoind-regtest`, and only runs on Linux.
+The test suite is in `bitcoind-regtest` and only runs on Linux.  There is also a nix derivation to run the test suite against multiple `bitcoind` versions:
+
+``` sh
+nix-build nix/multi-version-test.nix
+./result
+```
+
+To dump a representation of each `bitcoind` RPC version suitable for diffing:
+``` sh
+nix-build nix/rpc-versions.nix
+./result
+```
 
 
 Development

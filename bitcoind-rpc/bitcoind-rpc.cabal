@@ -31,10 +31,11 @@ library
     build-depends:
           aeson                          >=1.4      && <1.6
         , base                           >=4.12     && <4.15
-        , bytestring                    ^>=0.10
+        , bytestring                     >=0.10     && <0.12
         , base16-bytestring               <1.0
+        -- ^^ needed due to missing upper bound in haskoin-core
         , cereal                        ^>=0.5
-        , haskoin-core                   >=0.13.5   && <0.16
+        , haskoin-core                   >=0.13.5   && <0.18
         , http-client                    >=0.6      && <0.8
         , scientific                    ^>=0.3
         , servant                        >=0.15     && <0.19

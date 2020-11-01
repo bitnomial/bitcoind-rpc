@@ -36,6 +36,15 @@ library
     build-depends:
         containers                       >=0.5      && <0.7
 
+executable bitcoind-rpc-explorer
+    import:         core
+    main-is:        Main.hs
+    hs-source-dirs: rpc-explorer/
+    build-depends:
+          bitcoind-regtest
+        , bytestring           >=0.10 && <0.12
+        , optparse-applicative >=0.14 && <0.16
+
 
 test-suite bitcoind-rpc-tests
     import:         core
@@ -44,5 +53,5 @@ test-suite bitcoind-rpc-tests
     hs-source-dirs: test/
     build-depends:
           bitcoind-regtest
-        , tasty                         ^>=1.2
+        , tasty                          >=1.2 && <1.5
         , tasty-hunit                   ^>=0.10

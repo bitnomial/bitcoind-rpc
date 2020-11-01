@@ -1,0 +1,13 @@
+cradle:
+  cabal:
+    - path: "bitcoind-regtest/src/"
+      component: "lib:bitcoind-regtest"
+
+    - path: "bitcoind-regtest/rpc-explorer/Main.hs"
+      component: "bitcoind-regtest:exe:bitcoind-rpc-explorer"
+
+    - path: "bitcoind-regtest/test/"
+      component: "bitcoind-regtest:test:bitcoind-rpc-tests"
+
+    - path: "bitcoind-rpc/src/"
+      component: "lib:bitcoind-rpc"
