@@ -34,6 +34,7 @@ library
         , bytestring                     >=0.10     && <0.12
         , base16-bytestring               <1.0
         -- ^^ needed due to missing upper bound in haskoin-core
+        , bitcoin-compact-filters       ^>=0.1
         , cereal                        ^>=0.5
         , haskoin-core                   >=0.13.5   && <0.18
         , http-client                    >=0.6      && <0.8

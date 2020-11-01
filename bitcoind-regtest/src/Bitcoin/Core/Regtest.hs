@@ -124,6 +124,7 @@ bitcoind tmp ddir port output =
     args =
         [ "-regtest"
         , "-txindex"
+        , "-blockfilterindex=1"
         , "-disablewallet"
         , "-datadir=" <> ddir
         , "-rpcport=" <> show port

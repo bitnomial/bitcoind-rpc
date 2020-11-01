@@ -10,6 +10,8 @@ module Bitcoin.Core.RPC.Blockchain (
     getBlock,
     getBlockCount,
     getBlockHash,
+    CompactFilter (..),
+    getBlockFilter,
     BlockHeader (..),
     getBlockHeader,
     BlockStats (..),
@@ -27,6 +29,7 @@ module Bitcoin.Core.RPC.Blockchain (
     getRawMempool,
 ) where
 
+import Bitcoin.CompactFilter (BlockFilter, BlockFilterHeader)
 import Data.Aeson (
     FromJSON (..),
     withObject,
@@ -34,8 +37,10 @@ import Data.Aeson (
     (.:),
     (.:?),
  )
+import Data.Aeson.Types (Parser)
 import Data.Proxy (Proxy (..))
 import Data.Scientific (Scientific)
+import Data.Serialize (Serialize)
 import Data.Text (Text)
 import Data.Time (NominalDiffTime, UTCTime)
 import Data.Word (Word16, Word32, Word64)
@@ -115,6 +120,17 @@ instance FromJSON BlockStats where
             <*> o .: "utxo_increase"
             <*> o .: "utxo_size_inc"
 
+data CompactFilter = CompactFilter
+    { filterHeader :: BlockFilterHeader
+    , filterBody :: BlockFilter
+    }
+
+instance FromJSON CompactFilter where
+    parseJSON = withObject "CompactFilter" $ \o ->
+        CompactFilter
+            <$> (o .: "header" >>= parseFromHex)
+            <*> (o .: "filter" >>= parseFromHex)
+
 data BlockHeader = BlockHeader
     { blockHeaderHash :: BlockHash
     , blockHeaderConfs :: Word32
@@ -139,8 +155,9 @@ instance FromJSON BlockHeader where
             <*> o .: "nonce"
             <*> o .: "nTx"
             <*> (o .: "previousblockhash" >>= parseFromHex)
-      where
-        parseFromHex = either fail return . decodeFromHex
+
+parseFromHex :: Serialize a => Text -> Parser a
+parseFromHex = either fail return . decodeFromHex
 
 data ChainTipStatus = Invalid | HeadersOnly | ValidHeaders | ValidFork | Active
     deriving (Eq, Show)
@@ -218,6 +235,7 @@ type BlockchainRpc =
     BitcoindEndpoint "getbestblockhash" (C BlockHash)
         :<|> BitcoindEndpoint "getblock" (I BlockHash -> F DefZero Int -> C (HexEncoded Block))
         :<|> BitcoindEndpoint "getblockcount" (C Word32)
+        :<|> BitcoindEndpoint "getblockfilter" (I BlockHash -> C CompactFilter)
         :<|> BitcoindEndpoint "getblockhash" (I BlockHeight -> C BlockHash)
         :<|> BitcoindEndpoint "getblockheader" (I BlockHash -> F DefTrue Bool -> C BlockHeader)
         :<|> BitcoindEndpoint "getblockstats" (I BlockHash -> O [Text] -> C BlockStats)
@@ -238,6 +256,9 @@ getBlockCount :: BitcoindClient Word32
 
 -- | Returns hash of block in best-block-chain at height provided.
 getBlockHash :: BlockHeight -> BitcoindClient BlockHash
+
+-- | Retrieve a BIP 157 content filter for a particular block.
+getBlockFilter :: BlockHash -> BitcoindClient CompactFilter
 
 -- | Returns the header of the block corresponding to the given 'BlockHash'
 getBlockHeader :: BlockHash -> BitcoindClient BlockHeader
@@ -268,6 +289,7 @@ getRawMempool :: BitcoindClient [TxHash]
 getBestBlockHash
     :<|> getBlock'
     :<|> getBlockCount
+    :<|> getBlockFilter
     :<|> getBlockHash
     :<|> getBlockHeader
     :<|> getBlockStats'

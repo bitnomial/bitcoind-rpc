@@ -21,6 +21,7 @@ import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Test.Tasty (defaultMain)
 import Test.Tasty.HUnit (assertFailure, testCase)
 
+import Bitcoin.Core.RPC
 import Bitcoin.Core.Regtest (NodeHandle, withBitcoind)
 import qualified Bitcoin.Core.Regtest as R
 
@@ -31,6 +32,7 @@ main =
             [ testRpc "generatetoaddress" testGenerate
             , testRpc "getbestblockhash" getBestBlockHash
             , testRpc "getblockhash" $ getBlockHash 1
+            , testRpc "getblockfilter" $ testBlockFilter
             , testRpc "getblockheader" testBlockHeader
             , testRpc "getblock" testBlock
             , testRpc "getblockcount" getBlockCount
@@ -73,6 +75,9 @@ Just addrText = addrToText btcTest addr
 
 testBlock :: BitcoindClient Block
 testBlock = getBestBlockHash >>= getBlock
+
+testBlockFilter :: BitcoindClient CompactFilter
+testBlockFilter = getBestBlockHash >>= getBlockFilter
 
 testBlockHeader :: BitcoindClient BlockHeader
 testBlockHeader = getBestBlockHash >>= getBlockHeader

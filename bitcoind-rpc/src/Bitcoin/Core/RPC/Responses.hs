@@ -3,6 +3,7 @@ module Bitcoin.Core.RPC.Responses (
     MempoolTestResult (..),
 
     -- * Blocks
+    CompactFilter (..),
     BlockHeader (..),
     BlockStats (..),
     ChainTip (..),
