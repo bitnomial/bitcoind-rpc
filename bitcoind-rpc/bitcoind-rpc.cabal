@@ -1,6 +1,6 @@
 cabal-version:      2.2
 name:               bitcoind-rpc
-version:            0.1.1.0
+version:            0.2.0.0
 synopsis:           A streamlined interface to bitcoin core using Haskoin types and Servant
 homepage:           https://github.com/bitnomial/bitcoind-rpc
 license:            BSD-3-Clause
