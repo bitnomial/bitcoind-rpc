@@ -18,7 +18,7 @@ common core
           base                           >=4.12     && <4.15
         , bitcoind-rpc                  ^>=0.2
         , cereal                        ^>=0.5
-        , haskoin-core                   >=0.15     && <0.18
+        , haskoin-core                   >=0.15     && <0.19
         , http-client                    >=0.6      && <0.8
         , process                       ^>=1.6
         , servant                        >=0.15     && <0.19
