@@ -28,6 +28,7 @@ Supported bitcoin-core versions
 * `v0.19.1`
 * `v0.20.0`
 * `v0.20.1`
+* `v0.21.0`
 
 
 Test suite
