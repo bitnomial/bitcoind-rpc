@@ -24,10 +24,12 @@ import Test.Tasty.HUnit (assertFailure, testCase)
 import Bitcoin.Core.RPC
 import Bitcoin.Core.Regtest (NodeHandle, withBitcoind)
 import qualified Bitcoin.Core.Regtest as R
+import Control.Concurrent (threadDelay)
 
 main :: IO ()
 main =
-    defaultMain . testCase "bitcoind-rpc" . withBitcoind 8449 $
+    defaultMain . testCase "bitcoind-rpc" . withBitcoind 8449 $ \nodeHandle -> do
+        threadDelay 1_000_000
         bitcoindTests
             [ testRpc "generatetoaddress" testGenerate
             , testRpc "getbestblockhash" getBestBlockHash
@@ -56,6 +58,7 @@ main =
             , testRpc "addnode" $ addNode "127.0.0.1:8448" Add
             , testRpc "clearbanned" clearBanned
             ]
+            nodeHandle
 
 testGenerate :: BitcoindClient [BlockHash]
 testGenerate = generateToAddress 120 addrText Nothing

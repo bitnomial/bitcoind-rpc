@@ -71,6 +71,7 @@ import Haskoin.Transaction (
 import Haskoin.Util (encodeHex, maybeToEither)
 import Network.HTTP.Client (Manager)
 import Servant.API (BasicAuthData)
+import System.Directory (createDirectoryIfMissing)
 import System.IO (Handle, IOMode (..), openFile)
 import System.IO.Temp (getCanonicalTemporaryDirectory, withSystemTempDirectory)
 import System.Process (
@@ -117,6 +118,7 @@ withBitcoind ::
 withBitcoind port k = withSystemTempDirectory "bitcoind-rpc-tests" $ \dd -> do
     v <- bitcoindVersion
     tmp <- getCanonicalTemporaryDirectory
+    createDirectoryIfMissing True $ dd <> "/regtest/wallets"
     bracket (initBitcoind tmp dd port) stopBitcoind . const $ do
         auth <- basicAuthFromCookie $ dd <> "/regtest/.cookie"
         k $ NodeHandle port auth (rawTxSocket tmp) (rawBlockSocket tmp) v
@@ -159,7 +161,7 @@ bitcoind tmp ddir port output =
         [ "-regtest"
         , "-txindex"
         , "-blockfilterindex=1"
-        , "-disablewallet"
+        , "-walletdir=" <> ddir <> "/regtest/wallets"
         , "-datadir=" <> ddir
         , "-rpcport=" <> show port
         , "-zmqpubrawblock=" <> rawBlockSocket tmp

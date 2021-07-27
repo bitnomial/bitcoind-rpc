@@ -1,7 +1,11 @@
-module Main where
+{-# LANGUAGE NumericUnderscores #-}
+
+module Main (main) where
 
 import Control.Applicative (optional, (<**>))
+import Control.Concurrent (threadDelay)
 import Control.Monad ((>=>))
+import Control.Monad.Fix (fix)
 import Data.ByteString.Char8 (unpack)
 import Data.List (isPrefixOf, sort)
 import Data.Maybe (listToMaybe, mapMaybe)
@@ -17,7 +21,8 @@ import Options.Applicative (
     strOption,
  )
 import Servant.API (BasicAuthData (..))
-import System.Process (readProcess)
+import System.Exit (ExitCode (..))
+import System.Process (readProcessWithExitCode)
 
 import Bitcoin.Core.Regtest (
     NodeHandle,
@@ -52,8 +57,11 @@ parseHelpText = sort . mapMaybe (listToMaybe . words) . filter isRpc . lines
     isRpc = not . isPrefixOf "="
 
 bitcoinCli :: NodeHandle -> [String] -> IO String
-bitcoinCli h args =
-    readProcess "bitcoin-cli" (setupArgs <> args) mempty
+bitcoinCli h args = fix $ \go -> do
+    (code, output, _) <- readProcessWithExitCode "bitcoin-cli" (setupArgs <> args) mempty
+    if code == ExitSuccess
+        then pure output
+        else threadDelay 1_000_000 >> go
   where
     setupArgs =
         [ "-rpcport=" <> show (nodePort h)
