@@ -25,11 +25,18 @@ This package provides some tooling for testing a bitcoin-core integration.  Feat
 Supported bitcoin-core versions
 ----
 
+Non-wallet RPC calls:
+
 * `v0.19.1`
 * `v0.20.0`
 * `v0.20.1`
 * `v0.21.0`
+* `v0.21.1`
 
+Wallet and PSBT RPC calls: 
+
+* `v0.21.0` - except where noted
+* `v0.21.1`
 
 Test suite
 ----

@@ -26,6 +26,8 @@ library
         Bitcoin.Core.RPC.Control
         Bitcoin.Core.RPC.Network
         Bitcoin.Core.RPC.Transactions
+        Bitcoin.Core.RPC.Wallet
+        Data.Aeson.Utils
         Servant.Bitcoind
 
     build-depends:

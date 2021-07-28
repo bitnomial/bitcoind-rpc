@@ -27,8 +27,37 @@ module Bitcoin.Core.RPC.Responses (
     NodeInfoAddress (..),
     ConnDir (..),
     NetTotals (..),
+
+    -- * Wallet
+    NewMultisigAddress (..),
+    BumpFeeOptions (..),
+    BumpFeeResponse (..),
+    LoadWalletResponse (..),
+    AddressInfo (..),
+    BalanceDetails (..),
+    Balances (..),
+    Category (..),
+    TransactionDetails (..),
+    GetTransactionResponse (..),
+    WalletStateInfo (..),
+    DescriptorRequest (..),
+    ImportResponse (..),
+    ImportMultiRequest (..),
+    DescriptorDetails (..),
+    ListReceivedResponse (..),
+    ListReceivedByLabelResponse (..),
+    ListSinceBlockResponse (..),
+    ListUnspentOptions (..),
+    OutputDetails (..),
+    RescanResponse (..),
+    PrevTx (..),
+    SignRawTxResponse (..),
+    CreatePsbtOptions (..),
+    CreatePsbtResponse (..),
+    ProcessPsbtResponse (..),
 ) where
 
 import Bitcoin.Core.RPC.Blockchain
 import Bitcoin.Core.RPC.Network
 import Bitcoin.Core.RPC.Transactions
+import Bitcoin.Core.RPC.Wallet

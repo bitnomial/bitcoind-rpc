@@ -4,6 +4,8 @@
 
  We provide limited access to the bitcoin-core daemon RPC interface.  RPC
  method descriptions come from the bitcoind RPC help pages.
+
+ /WARNING:/ The wallet RPC calls work for @bitcoind@ versions @0.21.0@ and above.
 -}
 module Bitcoin.Core.RPC (
     -- * Interacting with bitcoind
@@ -15,7 +17,7 @@ module Bitcoin.Core.RPC (
     BitcoindException (..),
 
     -- * Transactions
-    getTransaction,
+    getRawTransaction,
     sendRawTransaction,
     sendTransaction,
     testMempoolAccept,
@@ -52,6 +54,59 @@ module Bitcoin.Core.RPC (
     getAddedNodeInfo,
     listBanned,
     getNetTotals,
+
+    -- * Wallet
+    abandonTransaction,
+    abortRescan,
+    AddressType (..),
+    addMultisigAddress,
+    backupWallet,
+    bumpFee,
+    createWallet,
+    dumpPrivKey,
+    dumpWallet,
+    encryptWallet,
+    Purpose (..),
+    getAddressesByLabel,
+    getAddressInfo,
+    getBalance,
+    getBalances,
+    getNewAddress,
+    getRawChangeAddress,
+    getReceivedByAddress,
+    getReceivedByLabel,
+    getTransaction,
+    getWalletInfo,
+    importAddress,
+    importDescriptors,
+    importMulti,
+    importPrivKey,
+    importWallet,
+    listDescriptors,
+    listLabels,
+    listLockUnspent,
+    listReceivedByAddress,
+    listReceivedByLabel,
+    listSinceBlock,
+    listTransactions,
+    listUnspent,
+    listWallets,
+    loadWallet,
+    lockUnspent,
+    psbtBumpFee,
+    rescanBlockchain,
+    FeeEstimationMode (..),
+    sendMany,
+    sendToAddress,
+    setLabel,
+    setTxFee,
+    signMessage,
+    signRawTx,
+    unloadWallet,
+    createFundedPsbt,
+    walletLock,
+    walletPassphrase,
+    processPsbt,
 
     -- * Control
     stop,
@@ -90,6 +145,7 @@ import Bitcoin.Core.RPC.Generating
 import Bitcoin.Core.RPC.Network
 import Bitcoin.Core.RPC.Responses
 import Bitcoin.Core.RPC.Transactions
+import Bitcoin.Core.RPC.Wallet
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindException (..),
