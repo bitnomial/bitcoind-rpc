@@ -80,7 +80,7 @@ data BlockStats = BlockStats
     , blockStatsMaxFeeRate :: Word32
     , blockStatsMinTxSize :: Word32
     , blockStatsOuts :: Word32
-    , blockStatsSubsidy :: Word32
+    , blockStatsSubsidy :: Word64
     , blockStatsSegwitSize :: Word32
     , blockStastSegwitWeight :: Word32
     , blockStatsSegwitCount :: Word32

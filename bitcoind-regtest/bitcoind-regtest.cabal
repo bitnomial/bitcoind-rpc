@@ -53,7 +53,16 @@ test-suite bitcoind-rpc-tests
     type:           exitcode-stdio-1.0
     main-is:        Main.hs
     hs-source-dirs: test/
+
+    other-modules:
+        Bitcoin.Core.Test.Misc
+        Bitcoin.Core.Test.PSBT
+        Bitcoin.Core.Test.Utils
+        Bitcoin.Core.Test.Wallet
+
     build-depends:
-          bitcoind-regtest
-        , tasty                          >=1.2 && <1.5
-        , tasty-hunit                   ^>=0.10
+          base64 ^>=0.4
+        , bitcoind-regtest
+        , containers ^>=0.6
+        , tasty >=1.2 && <1.5
+        , tasty-hunit ^>=0.10
