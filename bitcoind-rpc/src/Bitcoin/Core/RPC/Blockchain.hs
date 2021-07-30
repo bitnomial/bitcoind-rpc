@@ -49,6 +49,12 @@ import Haskoin.Crypto (Hash256)
 import Haskoin.Transaction (TxHash)
 import Servant.API ((:<|>) (..))
 
+import Data.Aeson.Utils (
+    HexEncoded (unHexEncoded),
+    decodeFromHex,
+    toSatoshis,
+    utcTime,
+ )
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
@@ -57,13 +63,9 @@ import Servant.Bitcoind (
     DefTrue,
     DefZero,
     F,
-    HexEncoded (..),
     I,
     O,
-    decodeFromHex,
     toBitcoindClient,
-    toSatoshis,
-    utcTime,
  )
 
 data BlockStats = BlockStats
@@ -215,8 +217,8 @@ data MempoolInfo = MempoolInfo
     , mempoolBytes :: Word32
     , mempoolUsage :: Word32
     , mempoolMax :: Word32
-    , mempoolMinFee :: Word32
-    , mempoolMinRelayFee :: Word32
+    , mempoolMinFee :: Word64
+    , mempoolMinRelayFee :: Word64
     }
     deriving (Eq, Show)
 

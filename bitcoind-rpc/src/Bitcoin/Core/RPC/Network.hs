@@ -37,6 +37,7 @@ import Data.Word (Word16, Word32, Word64)
 import Haskoin.Block (BlockHeight)
 import Servant.API ((:<|>) (..))
 
+import Data.Aeson.Utils (toSatoshis, utcTime)
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
@@ -45,8 +46,6 @@ import Servant.Bitcoind (
     I,
     O,
     toBitcoindClient,
-    toSatoshis,
-    utcTime,
  )
 
 -- | Commands as understood by 'addNode'
@@ -141,7 +140,7 @@ data PeerInfo = PeerInfo
     , inflight :: [BlockHeight]
     , whitelisted :: Bool
     , -- | in satoshis
-      minFeeFilter :: Word32
+      minFeeFilter :: Word64
     }
     deriving (Eq, Show)
 

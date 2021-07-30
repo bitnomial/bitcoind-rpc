@@ -1,8 +1,10 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Bitcoin.Core.Regtest (
     -- * Run an ephemeral regtest node
+    Version,
     NodeHandle (..),
     runBitcoind,
     withBitcoind,
@@ -23,10 +25,17 @@ module Bitcoin.Core.Regtest (
     pubKeys,
     addrs,
     textAddrs,
+
+    -- * Versions
+    v19_1,
+    v20_0,
+    v20_1,
+    v21_0,
+    v21_1,
 ) where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (bracket)
+import Control.Exception (Exception, bracket, throwIO)
 import Control.Monad (void)
 import qualified Data.Serialize as S
 import Data.Text (Text)
@@ -70,6 +79,7 @@ import System.Process (
     StdStream (..),
     createProcess,
     proc,
+    readProcess,
     terminateProcess,
     waitForProcess,
  )
@@ -80,6 +90,10 @@ import Bitcoin.Core.RPC (
     basicAuthFromCookie,
  )
 import qualified Bitcoin.Core.RPC as RPC
+import Data.Attoparsec.Text (char, decimal, parseOnly, sepBy, string)
+import qualified Data.Text as Text
+
+type Version = (Int, Int, Int)
 
 -- | Data needed to connect to a @bitcoind-regtest@ ephemeral node
 data NodeHandle = NodeHandle
@@ -87,11 +101,12 @@ data NodeHandle = NodeHandle
     , nodeAuth :: BasicAuthData
     , nodeRawTx :: FilePath
     , nodeRawBlock :: FilePath
+    , nodeVersion :: Version
     }
 
 -- | Run an RPC computation with an ephemeral node
 runBitcoind :: Manager -> NodeHandle -> BitcoindClient r -> IO (Either BitcoindException r)
-runBitcoind mgr (NodeHandle port auth _ _) = RPC.runBitcoind mgr "127.0.0.1" port auth
+runBitcoind mgr (NodeHandle port auth _ _ _) = RPC.runBitcoind mgr "127.0.0.1" port auth
 
 -- | Provide bracketed access to a fresh ephemeral node
 withBitcoind ::
@@ -100,10 +115,11 @@ withBitcoind ::
     (NodeHandle -> IO r) ->
     IO r
 withBitcoind port k = withSystemTempDirectory "bitcoind-rpc-tests" $ \dd -> do
+    v <- bitcoindVersion
     tmp <- getCanonicalTemporaryDirectory
     bracket (initBitcoind tmp dd port) stopBitcoind . const $ do
         auth <- basicAuthFromCookie $ dd <> "/regtest/.cookie"
-        k $ NodeHandle port auth (rawTxSocket tmp) (rawBlockSocket tmp)
+        k $ NodeHandle port auth (rawTxSocket tmp) (rawBlockSocket tmp) v
 
 initBitcoind :: FilePath -> FilePath -> Int -> IO ProcessHandle
 initBitcoind tmp ddir port = do
@@ -113,6 +129,24 @@ initBitcoind tmp ddir port = do
 
 stopBitcoind :: ProcessHandle -> IO ()
 stopBitcoind h = terminateProcess h >> void (waitForProcess h)
+
+bitcoindVersion :: IO Version
+bitcoindVersion =
+    readProcess "bitcoind" ["--version"] mempty
+        >>= either (throwIO . ParseError) pure . parseVersion
+  where
+    parseVersion = parseOnly versionP . Text.pack
+
+    versionP = do
+        string "Bitcoin Core version v"
+        decimal `sepBy` char '.' >>= \case
+            vA : vB : vC : _ -> pure (vA, vB, vC)
+            _ -> fail "Unable to parse version"
+
+newtype BitcoindRegtestError = ParseError String
+    deriving (Eq, Show)
+
+instance Exception BitcoindRegtestError
 
 bitcoind :: FilePath -> FilePath -> Int -> Handle -> CreateProcess
 bitcoind tmp ddir port output =
@@ -241,3 +275,10 @@ textAddrs = addrToText' <$> addrs
 
 textAddr0, textAddr1, textAddr2 :: Text
 textAddr0 : textAddr1 : textAddr2 : _ = textAddrs
+
+v19_1, v20_0, v20_1, v21_0, v21_1 :: Version
+v19_1 = (0, 19, 1)
+v20_0 = (0, 20, 0)
+v20_1 = (0, 20, 1)
+v21_0 = (0, 21, 0)
+v21_1 = (0, 21, 1)

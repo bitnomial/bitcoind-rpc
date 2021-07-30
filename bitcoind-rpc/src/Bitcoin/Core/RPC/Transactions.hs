@@ -20,13 +20,21 @@ import Haskoin.Transaction (Tx, TxHash)
 import Haskoin.Util (encodeHex)
 import Servant.API ((:<|>) (..))
 
+import Data.Aeson.Utils (
+    HexEncoded (unHexEncoded),
+    partialObject,
+    rangeToJSON,
+    satsPerBTC,
+    satsToBTCText,
+    toSatoshis,
+    (.=?),
+ )
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
     C,
     DefFalse,
     F,
-    HexEncoded (..),
     I,
     O,
     toBitcoindClient,

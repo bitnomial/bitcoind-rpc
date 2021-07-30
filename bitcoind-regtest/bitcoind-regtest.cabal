@@ -35,7 +35,8 @@ library
         Bitcoin.Core.Regtest
 
     build-depends:
-        containers                       >=0.5      && <0.7
+          attoparsec ^>=0.14
+        , containers >=0.5 && <0.7
 
 executable bitcoind-rpc-explorer
     import:         core
