@@ -20,6 +20,13 @@ module Bitcoin.Core.RPC (
     sendTransaction,
     testMempoolAccept,
 
+    -- * PSBT
+    analyzePsbt,
+    createPsbt,
+    finalizePsbt,
+    joinPsbts,
+    utxoUpdatePsbt,
+
     -- * Blocks
     getBlock,
     getBlockFilter,

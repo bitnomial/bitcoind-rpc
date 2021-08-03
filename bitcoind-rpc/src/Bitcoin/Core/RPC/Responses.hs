@@ -1,6 +1,13 @@
 module Bitcoin.Core.RPC.Responses (
     -- * Transactions
     MempoolTestResult (..),
+    PsbtInput (..),
+    PsbtOutputs (..),
+    PsbtMissing (..),
+    AnalyzePsbtInput (..),
+    AnalyzePsbtResponse (..),
+    FinalizePsbtResponse (..),
+    Descriptor (..),
 
     -- * Blocks
     CompactFilter (..),
