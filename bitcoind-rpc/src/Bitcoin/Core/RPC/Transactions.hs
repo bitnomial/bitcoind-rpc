@@ -31,7 +31,7 @@ import Data.Proxy (Proxy (..))
 import Data.Scientific (Scientific)
 import qualified Data.Serialize as S
 import Data.Text (Text)
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 import Haskoin.Block (BlockHash)
 import Haskoin.Transaction (PartiallySignedTransaction, Tx, TxHash)
 import Haskoin.Util (encodeHex)
@@ -208,7 +208,7 @@ data PsbtInput = PsbtInput
     { -- | The transaction id
       psbtInputTx :: TxHash
     , -- | The output number
-      psbtInputVOut :: Int
+      psbtInputVOut :: Word32
     , -- | The sequence number
       psbtInputSequence :: Maybe Int
     }

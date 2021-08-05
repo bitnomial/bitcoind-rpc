@@ -108,7 +108,7 @@ import Data.Scientific (Scientific)
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Time (NominalDiffTime, UTCTime)
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 import Haskoin (
     BlockHash,
     BlockHeight,
@@ -906,7 +906,7 @@ data GetTxOutputDetails = GetTxOutputDetails
     , -- | A comment for the address/transaction, if any
       getTxLabel :: Maybe Text
     , -- | the vout value
-      getTxVout :: Int
+      getTxVout :: Word32
     , getTxOutputFee :: Maybe Word64
     , -- | 'true' if the transaction has been abandoned (inputs are respendable). Only
       -- available for the 'send' category of transactions.
@@ -1446,7 +1446,7 @@ data TransactionDetails = TransactionDetails
     , -- | A comment for the address/transaction, if any
       txDetailsLabel :: Maybe Text
     , -- | The vout value
-      txDetailsVout :: Int
+      txDetailsVout :: Word32
     , -- | The amount of the fee in sats. This is only available for
       -- the 'send' category of transactions.
       txDetailsFee :: Maybe Word64
@@ -1593,7 +1593,7 @@ data OutputDetails = OutputDetails
     { -- | the transaction id
       outputTxId :: TxHash
     , -- | the vout value
-      outputVOut :: Int
+      outputVOut :: Word32
     , -- | the bitcoin address
       outputAddress :: Text
     , -- | The associated label, or "" for the default label
@@ -1892,7 +1892,7 @@ data PrevTx = PrevTx
     { -- | The transaction id
       prevTxId :: TxHash
     , -- | The output number
-      prevTxVOut :: Int
+      prevTxVOut :: Word32
     , -- | script key
       prevTxScriptPubKey :: Text
     , -- | redeem script (required for P2SH)
@@ -1917,7 +1917,7 @@ instance ToJSON PrevTx where
 
 data SignRawTxError = SignRawTxError
     { signRawTxErrorTxId :: TxHash
-    , signRawTxErrorVOut :: Int
+    , signRawTxErrorVOut :: Word32
     , signRawTxErrorScriptSig :: Text
     , signRawTxErrorSequence :: Int
     , signRawTxError :: Text
@@ -2042,8 +2042,7 @@ instance ToJSON CreatePsbtOptions where
 
 -- | @since 0.3.0.0
 data CreatePsbtResponse = CreatePsbtResponse
-    { -- | The resulting raw transaction (base64-encoded string)
-      createPsbtPsbt :: Text
+    { createPsbtPsbt :: PartiallySignedTransaction
     , -- | Fee in sats the resulting transaction pays
       createPsbtFee :: Word64
     , -- | The position of the added change output, or -1
@@ -2054,7 +2053,7 @@ data CreatePsbtResponse = CreatePsbtResponse
 instance FromJSON CreatePsbtResponse where
     parseJSON = withObject "CreatePsbtResponse" $ \obj ->
         CreatePsbtResponse
-            <$> obj .: "psbt"
+            <$> (unBase64Encoded <$> obj .: "psbt")
             <*> (toSatoshis <$> obj .: "fee")
             <*> obj .: "changepos"
 
