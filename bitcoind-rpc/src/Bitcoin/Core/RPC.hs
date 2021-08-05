@@ -1,3 +1,6 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
+
 {- |
  Module:      Bitcoin.Core.RPC
  Stability:   experimental
@@ -11,6 +14,7 @@ module Bitcoin.Core.RPC (
     -- * Interacting with bitcoind
     BitcoindClient,
     runBitcoind,
+    tryBitcoind,
     cookieClient,
     basicAuthFromCookie,
     mkBitcoindEnv,
@@ -122,9 +126,10 @@ module Bitcoin.Core.RPC (
 ) where
 
 import Control.Monad (join)
+import Control.Monad.Error.Class (catchError)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Except (runExceptT)
-import Control.Monad.Trans.Reader (runReaderT)
+import Control.Monad.Trans.Except (ExceptT (ExceptT), runExceptT)
+import Control.Monad.Trans.Reader (ReaderT (ReaderT), runReaderT)
 import Data.Bifunctor (first, second)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as BS8
@@ -133,9 +138,11 @@ import Servant.API (BasicAuthData (..))
 import Servant.Client (
     BaseUrl (..),
     ClientEnv,
-    ClientError,
+    ClientError (FailureResponse),
     Scheme (..),
     mkClientEnv,
+    responseBody,
+    responseStatusCode,
     runClientM,
  )
 
@@ -146,10 +153,14 @@ import Bitcoin.Core.RPC.Network
 import Bitcoin.Core.RPC.Responses
 import Bitcoin.Core.RPC.Transactions
 import Bitcoin.Core.RPC.Wallet
+import Data.Aeson (Value)
+import qualified Data.Aeson as Ae
+import Network.HTTP.Types (statusCode)
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindException (..),
  )
+import Servant.Client.JsonRpc (JsonRpcErr (JsonRpcErr), JsonRpcResponse (Errors))
 
 -- | Convenience function for sending a RPC call to bitcoind
 runBitcoind ::
@@ -165,6 +176,14 @@ runBitcoind mgr host port auth =
     fmap consolidateErrors . (`runClientM` env) . runExceptT . (`runReaderT` auth)
   where
     env = mkBitcoindEnv mgr host port
+
+{- | Convenience function for handling errors without leaving the
+ 'BitcoindClient' context
+-}
+tryBitcoind :: BitcoindClient a -> BitcoindClient (Either BitcoindException a)
+tryBitcoind (ReaderT f) = ReaderT $ \x ->
+    let ExceptT task = f x
+     in ExceptT $ catchError (Right <$> task) (pure . Left . decodeErrorResponse)
 
 -- | Send a RPC call to bitcoind using credentials from a cookie file
 cookieClient ::
@@ -203,4 +222,12 @@ mkBitcoindEnv ::
 mkBitcoindEnv mgr host port = mkClientEnv mgr $ BaseUrl Http host port ""
 
 consolidateErrors :: Either ClientError (Either BitcoindException a) -> Either BitcoindException a
-consolidateErrors = join . first ClientException
+consolidateErrors = join . first decodeErrorResponse
+
+decodeErrorResponse :: ClientError -> BitcoindException
+decodeErrorResponse = \case
+    FailureResponse _ response
+        | (statusCode . responseStatusCode) response == 500
+          , Just (Errors _ (JsonRpcErr _ message _)) <- (Ae.decode @(JsonRpcResponse Value Value) . responseBody) response ->
+            RpcException message
+    otherError -> ClientException otherError

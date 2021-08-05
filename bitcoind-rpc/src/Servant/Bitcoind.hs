@@ -138,7 +138,7 @@ instance
 
 type BitcoindRpc m = BasicAuth "bitcoind" () :> JsonRpc m [Value] String Value
 
-type BitcoindClient r = ReaderT BasicAuthData (ExceptT BitcoindException ClientM) r
+type BitcoindClient = ReaderT BasicAuthData (ExceptT BitcoindException ClientM)
 
 type NakedClient =
     BasicAuthData ->

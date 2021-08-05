@@ -40,6 +40,8 @@ library
         , containers ^>=0.6
         , haskoin-core >=0.17.1 && <0.21
         , http-client >=0.6 && <0.8
+        , http-types ^>=0.12
+        , mtl ^>=2.2
         , scientific ^>=0.3
         , servant >=0.15 && <0.19
         , servant-client >=0.15 && <0.19
