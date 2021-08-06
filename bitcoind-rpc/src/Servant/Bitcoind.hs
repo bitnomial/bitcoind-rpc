@@ -41,6 +41,8 @@ import Data.Aeson (
     FromJSON (..),
     ToJSON (..),
     Value (Null),
+    object,
+    (.=),
  )
 import qualified Data.Aeson.Types as Ae
 import Data.Bifunctor (first)
@@ -63,6 +65,14 @@ data BitcoindException
     | ClientException ClientError
     | DecodingError String
     deriving (Show)
+
+instance ToJSON BitcoindException where
+    toJSON err = object ["type" .= theType, "error" .= theError]
+      where
+        (theType, theError) = case err of
+            RpcException rpcError -> ("RpcException" :: Text, rpcError)
+            ClientException clientError -> ("ClientException", show clientError)
+            DecodingError decodingError -> ("DecodingError", decodingError)
 
 instance Exception BitcoindException
 
