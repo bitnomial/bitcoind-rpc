@@ -32,35 +32,23 @@ module Servant.Bitcoind (
     -- * Client generation mechanism
     HasBitcoindClient (..),
     Rewrite (..),
-
-    -- * Utility functions
-    utcTime,
-    toSatoshis,
-    decodeFromHex,
-    HexEncoded (..),
 ) where
 
 import Control.Exception (Exception)
-import Control.Monad ((>=>))
 import Control.Monad.Trans.Except (ExceptT (..))
 import Control.Monad.Trans.Reader (ReaderT (..))
 import Data.Aeson (
     FromJSON (..),
     ToJSON (..),
-    Value,
-    withText,
+    Value (Null),
+    object,
+    (.=),
  )
 import qualified Data.Aeson.Types as Ae
 import Data.Bifunctor (first)
 import Data.Proxy (Proxy (..))
-import Data.Scientific (Scientific)
-import Data.Serialize (Serialize, decode)
 import Data.Text (Text)
-import Data.Time (UTCTime)
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-import Data.Word (Word32, Word64)
 import GHC.TypeLits (KnownSymbol, Symbol)
-import Haskoin.Util (decodeHex)
 import Servant.API ((:<|>) (..), (:>))
 import Servant.API.BasicAuth (BasicAuth, BasicAuthData)
 import Servant.Client (ClientError, ClientM, client)
@@ -77,6 +65,14 @@ data BitcoindException
     | ClientException ClientError
     | DecodingError String
     deriving (Show)
+
+instance ToJSON BitcoindException where
+    toJSON err = object ["type" .= theType, "error" .= theError]
+      where
+        (theType, theError) = case err of
+            RpcException rpcError -> ("RpcException" :: Text, rpcError)
+            ClientException clientError -> ("ClientException", show clientError)
+            DecodingError decodingError -> ("DecodingError", decodingError)
 
 instance Exception BitcoindException
 
@@ -131,8 +127,17 @@ instance
     type TheBitcoindClient (BitcoindEndpoint m a) = RewriteTo a
     toBitcoindClient _ =
         rewriteRpc (Proxy @a)
+            . trimArguments
             . client
             $ Proxy @(BitcoindRpc m)
+      where
+        trimArguments f authData args = f authData $ dropTrailingNothings args
+        dropTrailingNothings [] = []
+        dropTrailingNothings (x : xs) = case dropTrailingNothings xs of
+            []
+                | x == Null -> []
+                | otherwise -> [x]
+            adjustedTail -> x : adjustedTail
 
 instance
     (HasBitcoindClient x, HasBitcoindClient y) =>
@@ -143,7 +148,7 @@ instance
 
 type BitcoindRpc m = BasicAuth "bitcoind" () :> JsonRpc m [Value] String Value
 
-type BitcoindClient r = ReaderT BasicAuthData (ExceptT BitcoindException ClientM) r
+type BitcoindClient = ReaderT BasicAuthData (ExceptT BitcoindException ClientM)
 
 type NakedClient =
     BasicAuthData ->
@@ -202,7 +207,7 @@ instance
     type RewriteFrom (O a -> b) = NakedClient
     type RewriteTo (O a -> b) = Maybe a -> RewriteTo b
 
-    rewriteRpc _ f x = rewriteRpc (Proxy @b) $ \auth args -> f auth ((toJSON <$> x) `maybeCons` args)
+    rewriteRpc _ f x = rewriteRpc (Proxy @b) $ \auth args -> f auth (toJSON x : args)
 
 -- | Add a fixed argument
 instance
@@ -221,23 +226,3 @@ instance (Rewrite a, Rewrite b) => Rewrite (a :<|> b) where
     type RewriteFrom (a :<|> b) = RewriteFrom a :<|> RewriteFrom b
     type RewriteTo (a :<|> b) = RewriteTo a :<|> RewriteTo b
     rewriteRpc _ (x :<|> y) = rewriteRpc (Proxy @a) x :<|> rewriteRpc (Proxy @b) y
-
-maybeCons :: Maybe a -> [a] -> [a]
-maybeCons mx xs = maybe xs (: xs) mx
-
--- | Helper function for decoding POSIX timestamps
-utcTime :: Word64 -> UTCTime
-utcTime = posixSecondsToUTCTime . fromIntegral
-
--- | Convert BTC to Satoshis
-toSatoshis :: Scientific -> Word32
-toSatoshis = floor . (* 100_000_000)
-
--- | Read a serializable from a hex string
-decodeFromHex :: Serialize a => Text -> Either String a
-decodeFromHex = maybe (Left "Invalid hex") Right . decodeHex >=> decode
-
-newtype HexEncoded a = HexEncoded {unHexEncoded :: a} deriving (Eq, Show)
-
-instance Serialize a => FromJSON (HexEncoded a) where
-    parseJSON = withText "HexEncoded" $ either fail (return . HexEncoded) . decodeFromHex

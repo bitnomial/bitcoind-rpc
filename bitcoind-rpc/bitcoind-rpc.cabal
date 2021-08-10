@@ -1,6 +1,6 @@
 cabal-version:      2.2
 name:               bitcoind-rpc
-version:            0.2.0.0
+version:            0.3.0.0
 synopsis:           A streamlined interface to bitcoin core using Haskoin types and Servant
 homepage:           https://github.com/bitnomial/bitcoind-rpc
 license:            BSD-3-Clause
@@ -26,22 +26,26 @@ library
         Bitcoin.Core.RPC.Control
         Bitcoin.Core.RPC.Network
         Bitcoin.Core.RPC.Transactions
+        Bitcoin.Core.RPC.Wallet
+        Data.Aeson.Utils
         Servant.Bitcoind
 
     build-depends:
-          aeson                          >=1.4      && <1.6
-        , base                           >=4.12     && <4.15
-        , bytestring                     >=0.10     && <0.12
-        , base16-bytestring               <1.0
-        -- ^^ needed due to missing upper bound in haskoin-core
-        , bitcoin-compact-filters       ^>=0.1
-        , cereal                        ^>=0.5
-        , haskoin-core                   >=0.13.5   && <0.19
-        , http-client                    >=0.6      && <0.8
-        , scientific                    ^>=0.3
-        , servant                        >=0.15     && <0.19
-        , servant-client                 >=0.15     && <0.19
-        , servant-jsonrpc-client         >=1.0      && <1.2
-        , text                          ^>=1.2
-        , time                           >=1.8      && <1.12
-        , transformers                  ^>=0.5
+          aeson >=1.4 && <1.6
+        , base >=4.12 && <4.15
+        , base64 ^>=0.4
+        , bytestring >=0.10 && <0.12
+        , bitcoin-compact-filters ^>=0.1
+        , cereal ^>=0.5
+        , containers ^>=0.6
+        , haskoin-core >=0.17.1 && <0.21
+        , http-client >=0.6 && <0.8
+        , http-types ^>=0.12
+        , mtl ^>=2.2
+        , scientific ^>=0.3
+        , servant >=0.15 && <0.19
+        , servant-client >=0.15 && <0.19
+        , servant-jsonrpc-client >=1.0 && <1.2
+        , text ^>=1.2
+        , time >=1.8 && <1.13
+        , transformers >=0.5 && <0.7
