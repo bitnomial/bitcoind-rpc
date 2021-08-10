@@ -83,8 +83,11 @@ module Bitcoin.Core.RPC (
     getWalletInfo,
     importAddress,
     importDescriptors,
+    ImportScriptPubKey (..),
+    ImportMultiRequest (..),
     importMulti,
     importPrivKey,
+    importPubKey,
     importWallet,
     listDescriptors,
     listLabels,
@@ -111,6 +114,10 @@ module Bitcoin.Core.RPC (
     walletLock,
     walletPassphrase,
     processPsbt,
+
+    -- * Utilities
+    estimateSmartFee,
+    getDescriptorInfo,
 
     -- * Control
     stop,
@@ -183,7 +190,7 @@ runBitcoind mgr host port auth =
 tryBitcoind :: BitcoindClient a -> BitcoindClient (Either BitcoindException a)
 tryBitcoind (ReaderT f) = ReaderT $ \x ->
     let ExceptT task = f x
-     in ExceptT $ catchError (Right <$> task) (pure . Left . decodeErrorResponse)
+     in ExceptT . fmap Right $ catchError task (pure . Left . decodeErrorResponse)
 
 -- | Send a RPC call to bitcoind using credentials from a cookie file
 cookieClient ::

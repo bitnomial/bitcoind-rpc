@@ -28,6 +28,10 @@ module Bitcoin.Core.RPC.Responses (
     ConnDir (..),
     NetTotals (..),
 
+    -- * Utilities
+    FeeEstimationMode (..),
+    EstimateSmartFeeResponse (..),
+
     -- * Wallet
     NewMultisigAddress (..),
     BumpFeeOptions (..),
@@ -36,6 +40,7 @@ module Bitcoin.Core.RPC.Responses (
     AddressInfo (..),
     BalanceDetails (..),
     Balances (..),
+    GetDescriptorResponse (..),
     Category (..),
     TransactionDetails (..),
     GetTransactionResponse (..),

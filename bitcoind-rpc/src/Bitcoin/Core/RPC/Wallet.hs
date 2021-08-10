@@ -1,6 +1,5 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -33,6 +32,8 @@ module Bitcoin.Core.RPC.Wallet (
     BalanceDetails (..),
     Balances (..),
     getBalances,
+    GetDescriptorResponse (..),
+    getDescriptorInfo,
     getNewAddress,
     getRawChangeAddress,
     getReceivedByAddress,
@@ -47,9 +48,11 @@ module Bitcoin.Core.RPC.Wallet (
     DescriptorRequest (..),
     ImportResponse (..),
     importDescriptors,
+    ImportScriptPubKey (..),
     ImportMultiRequest (..),
     importMulti,
     importPrivKey,
+    importPubKey,
     importWallet,
     DescriptorDetails (..),
     listDescriptors,
@@ -71,7 +74,6 @@ module Bitcoin.Core.RPC.Wallet (
     psbtBumpFee,
     RescanResponse (..),
     rescanBlockchain,
-    FeeEstimationMode (..),
     sendMany,
     sendToAddress,
     setLabel,
@@ -116,13 +118,17 @@ import Haskoin (
     Hash160,
     OutPoint (OutPoint),
     PartiallySignedTransaction,
+    PubKeyI,
+    Script,
+    SecKey,
     Tx,
     TxHash,
  )
 import Servant.API ((:<|>) (..))
 
-import Bitcoin.Core.RPC.Transactions (PsbtInput, PsbtOutputs)
+import Bitcoin.Core.RPC.Transactions (FeeEstimationMode, PsbtInput, PsbtOutputs)
 import Data.Aeson.Utils (
+    HexEncoded (HexEncoded),
     partialObject,
     rangeToJSON,
     satsToBTCText,
@@ -178,6 +184,7 @@ type WalletRpc =
         :<|> BitcoindEndpoint "getaddressinfo" (I Text -> C AddressInfo)
         :<|> BitcoindEndpoint "getbalance" (O Text -> O Int -> O Bool -> O Bool -> C Scientific)
         :<|> BitcoindEndpoint "getbalances" (C Balances)
+        :<|> BitcoindEndpoint "getdescriptorinfo" (I Text -> C GetDescriptorResponse)
         :<|> BitcoindEndpoint "getnewaddress" (O Text -> O AddressType -> C Text)
         :<|> BitcoindEndpoint "getrawchangeaddress" (O AddressType -> C Text)
         :<|> BitcoindEndpoint "getreceivedbyaddress" (I Text -> O Int -> C Scientific)
@@ -196,8 +203,7 @@ type WalletRpc =
         :<|> BitcoindEndpoint "importprivkey" (I Text -> O Text -> O Bool -> CX)
         -- WAIT importprunedfunds "rawtransaction" "txoutproof"
         --      :<|> BitcoindEndpoint "importprunedfunds" ()
-        -- WAIT importpubkey "pubkey" ( "label" rescan )
-        --      :<|> BitcoindEndpoint "importpubkey" ()
+        :<|> BitcoindEndpoint "importpubkey" (I PubKeyI -> O Text -> O Bool -> CX)
         :<|> BitcoindEndpoint "importwallet" (I FilePath -> CX)
         -- WAIT keypoolrefill ( newsize )
         --      :<|> BitcoindEndpoint "keypoolrefill" ()
@@ -345,6 +351,7 @@ abandonTransaction
     :<|> getAddressInfo
     :<|> getBalance_
     :<|> getBalances
+    :<|> getDescriptorInfo
     :<|> getNewAddress
     :<|> getRawChangeAddress
     :<|> getReceivedByAddress_
@@ -355,6 +362,7 @@ abandonTransaction
     :<|> importDescriptors
     :<|> importMulti_
     :<|> importPrivKey
+    :<|> importPubKey
     :<|> importWallet
     :<|> listDescriptors
     :<|> listLabels_
@@ -821,6 +829,39 @@ instance FromJSON Balances where
 -}
 getBalances :: BitcoindClient Balances
 
+-- | @since 0.3.0.0
+data GetDescriptorResponse = GetDescriptorResponse
+    { -- | The descriptor in canonical form, without private keys
+      getDescriptorDescriptor :: Text
+    , -- | The checksum for the input descriptor
+      getDescriptorChecksum :: Text
+    , -- | Whether the descriptor is ranged
+      getDescriptorIsRange :: Bool
+    , -- | Whether the descriptor is solvable
+      getDescritporIsSolvable :: Bool
+    , -- | Whether the input descriptor contained at least one private key
+      getDescriptorHasPrivKeys :: Bool
+    }
+    deriving (Eq, Show)
+
+instance FromJSON GetDescriptorResponse where
+    parseJSON = withObject "GetDescriptorResponse" $ \obj ->
+        GetDescriptorResponse
+            <$> obj .: "descriptor"
+            <*> obj .: "checksum"
+            <*> obj .: "isrange"
+            <*> obj .: "issolvable"
+            <*> obj .: "hasprivatekeys"
+
+{- | Analyzes a descriptor.
+
+ @since 0.3.0.0
+-}
+getDescriptorInfo ::
+    -- | The descriptor
+    Text ->
+    BitcoindClient GetDescriptorResponse
+
 {- | Returns a new Bitcoin address for receiving payments.
  If 'label' is specified, it is added to the address book
  so payments received with the address will be associated with 'label'.
@@ -920,7 +961,7 @@ instance FromJSON GetTxOutputDetails where
             <$> (fromMaybe False <$> obj .:? "involvesWatchOnly")
             <*> obj .: "address"
             <*> obj .: "category"
-            <*> (toSatoshis <$> obj .: "amount")
+            <*> (toSatoshis . abs <$> obj .: "amount")
             <*> obj .:? "label"
             <*> obj .: "vout"
             <*> (fmap (toSatoshis . negate) <$> obj .:? "fee")
@@ -941,13 +982,13 @@ data GetTransactionResponse = GetTransactionResponse
     , -- | Only present if we consider transaction to be trusted and so safe to spend from.
       getTxTrusted :: Bool
     , -- | The block hash containing the transaction.
-      getTxBlockId :: BlockHash
+      getTxBlockId :: Maybe BlockHash
     , -- | The block height containing the transaction.
-      getTxBlockHeight :: BlockHeight
+      getTxBlockHeight :: Maybe BlockHeight
     , -- | The index of the transaction in the block that includes it.
-      getTxBlockIndex :: Int
+      getTxBlockIndex :: Maybe Int
     , -- | The block time expressed in UNIX epoch time.
-      getTxBlockTime :: UTCTime
+      getTxBlockTime :: Maybe UTCTime
     , -- | The transaction id.
       getTxId :: TxHash
     , -- | Conflicting transaction ids.
@@ -978,10 +1019,10 @@ instance FromJSON GetTransactionResponse where
             <*> obj .: "confirmations"
             <*> (fromMaybe False <$> obj .:? "generated")
             <*> (fromMaybe False <$> obj .:? "trusted")
-            <*> obj .: "blockhash"
-            <*> obj .: "blockheight"
-            <*> obj .: "blockindex"
-            <*> (utcTime <$> obj .: "blocktime")
+            <*> obj .:? "blockhash"
+            <*> obj .:? "blockheight"
+            <*> obj .:? "blockindex"
+            <*> (fmap utcTime <$> obj .:? "blocktime")
             <*> obj .: "txid"
             <*> obj .: "walletconflicts"
             <*> (utcTime <$> obj .: "time")
@@ -1068,15 +1109,18 @@ instance FromJSON WalletStateInfo where
 -}
 getWalletInfo :: BitcoindClient WalletStateInfo
 
-{- | Adds an address or script (in hex) that can be watched as if it were in your wallet but cannot be used to spend. Requires a new wallet backup.
+{- | Adds an address or script (in hex) that can be watched as if it were in
+ your wallet but cannot be used to spend. Requires a new wallet backup.
 
- Note: This call can take over an hour to complete if rescan is true, during that time, other rpc calls
- may report that the imported address exists but related transactions are still missing, leading to temporarily incorrect/bogus balances and unspent outputs until rescan completes.
- If you have the full public key, you should call importpubkey instead of this.
- Hint: use importmulti to import more than one address.
+ Note: This call can take over an hour to complete if rescan is true, during
+ that time, other rpc calls may report that the imported address exists but
+ related transactions are still missing, leading to temporarily incorrect/bogus
+ balances and unspent outputs until rescan completes. If you have the full
+ public key, you should call importpubkey instead of this. Hint: use importmulti
+ to import more than one address.
 
- Note: If you import a non-standard raw script in hex form, outputs sending to it will be treated
- as change, and not show up in many RPCs.
+ Note: If you import a non-standard raw script in hex form, outputs sending to
+ it will be treated as change, and not show up in many RPCs.
  Note: Use "getwalletinfo" to query the scanning progress.
 
  @since 0.3.0.0
@@ -1157,12 +1201,12 @@ importDescriptors ::
     BitcoindClient [ImportResponse]
 
 -- | @since 0.3.0.0
-data ImportScriptPubKey = ImportScript Text | ImportAddress Text
+data ImportScriptPubKey = ImportScript Script | ImportAddress Text
     deriving (Eq, Show)
 
 instance ToJSON ImportScriptPubKey where
     toJSON = \case
-        ImportScript script -> toJSON script
+        ImportScript script -> toJSON $ HexEncoded script
         ImportAddress addr -> object ["address" .= addr]
 
 -- | @since 0.3.0.0
@@ -1179,16 +1223,16 @@ data ImportMultiRequest = ImportMultiRequest
       -- creation time of all keys being imported by the importmulti call will be scanned.
       importMultiTimestamp :: Maybe UTCTime
     , -- | Allowed only if the scriptPubKey is a P2SH or P2SH-P2WSH address/scriptPubKey
-      importMultiRedeemScript :: Maybe Text
+      importMultiRedeemScript :: Maybe Script
     , -- | Allowed only if the scriptPubKey is a P2SH-P2WSH or P2WSH address/scriptPubKey
-      importMultiWitnessScript :: Maybe Text
+      importMultiWitnessScript :: Maybe Script
     , -- | Array of strings giving pubkeys to import. They must occur in P2PKH
       -- or P2WPKH scripts. They are not required when the private key is also
       -- provided (see the "keys" argument).
-      importMultiPubkeys :: [Text]
+      importMultiPubkeys :: [PubKeyI]
     , -- | Array of strings giving private keys to import. The corresponding
       -- public keys must occur in the output or redeemscript.
-      importMultiKeys :: [Text]
+      importMultiKeys :: [SecKey]
     , -- | If a ranged descriptor is used, this specifies the end or the range
       -- (in the form [begin,end]) to import
       importMultiRange :: Maybe (Int, Maybe Int)
@@ -1212,10 +1256,10 @@ instance ToJSON ImportMultiRequest where
             [ "desc" .=? importMultiDesc req
             , "scriptPubKey" .=? importMultiScriptPubKey req
             , Just $ "timestamp" .= (maybe (toJSON @Text "now") toJSON . importMultiTimestamp) req
-            , "reedemscript" .=? importMultiRedeemScript req
-            , "witnessscript" .=? importMultiWitnessScript req
+            , "reedemscript" .=? (HexEncoded <$> importMultiRedeemScript req)
+            , "witnessscript" .=? (HexEncoded <$> importMultiWitnessScript req)
             , Just $ "pubkeys" .= importMultiPubkeys req
-            , Just $ "keys" .= importMultiKeys req
+            , Just $ "keys" .= (HexEncoded <$> importMultiKeys req)
             , "range" .=? (fmap rangeToJSON . importMultiRange) req
             , "internal" .=? importMultiInternal req
             , "watchonly" .=? importMultiWatchOnly req
@@ -1271,6 +1315,26 @@ importMulti req = importMulti_ req . fmap ImportMultiOptions
 importPrivKey ::
     -- | The private key (see dumpprivkey)
     Text ->
+    -- | An optional label
+    Maybe Text ->
+    -- | Rescan the wallet for transactions
+    Maybe Bool ->
+    BitcoindClient ()
+
+{- | Adds a public key (in hex) that can be watched as if it were in your wallet
+ but cannot be used to spend. Requires a new wallet backup.  Hint: use
+ importmulti to import more than one public key.
+
+ Note: This call can take over an hour to complete if rescan is true, during
+ that time, other rpc calls may report that the imported pubkey exists but
+ related transactions are still missing, leading to temporarily incorrect/bogus
+ balances and unspent outputs until rescan completes.  Note: Use "getwalletinfo"
+ to query the scanning progress.
+
+ @since 0.3.0.0
+-}
+importPubKey ::
+    PubKeyI ->
     -- | An optional label
     Maybe Text ->
     -- | Rescan the wallet for transactions
@@ -1460,13 +1524,13 @@ data TransactionDetails = TransactionDetails
     , -- | Only present if we consider transaction to be trusted and so safe to spend from.
       txDetailsTrusted :: Bool
     , -- | The block hash containing the transaction.
-      txDetailsBlockHash :: BlockHash
+      txDetailsBlockHash :: Maybe BlockHash
     , -- | The block height containing the transaction.
-      txDetailsBlockHeight :: BlockHeight
+      txDetailsBlockHeight :: Maybe BlockHeight
     , -- | The index of the transaction in the block that includes it.
-      txDetailsBlockIndex :: Int
+      txDetailsBlockIndex :: Maybe Int
     , -- | The block time expressed in UNIX epoch time.
-      txDetailsBlockTime :: UTCTime
+      txDetailsBlockTime :: Maybe UTCTime
     , -- | The transaction id.
       txDetailsTxId :: TxHash
     , -- | Conflicting transaction ids.
@@ -1498,10 +1562,10 @@ instance FromJSON TransactionDetails where
             <*> obj .: "confirmations"
             <*> (fromMaybe False <$> obj .:? "generated")
             <*> (fromMaybe False <$> obj .:? "trusted")
-            <*> obj .: "blockhash"
-            <*> obj .: "blockheight"
-            <*> obj .: "blockindex"
-            <*> (utcTime <$> obj .: "blocktime")
+            <*> obj .:? "blockhash"
+            <*> obj .:? "blockheight"
+            <*> obj .:? "blockindex"
+            <*> (fmap utcTime <$> obj .:? "blocktime")
             <*> obj .: "txid"
             <*> obj .: "walletconflicts"
             <*> (utcTime <$> obj .: "time")
@@ -1749,26 +1813,6 @@ rescanBlockchain ::
     Maybe BlockHeight ->
     Maybe BlockHeight ->
     BitcoindClient RescanResponse
-
--- | @since 0.3.0.0
-data FeeEstimationMode
-    = Conservative
-    | Economical
-    | Unset
-    deriving (Eq, Show)
-
-instance FromJSON FeeEstimationMode where
-    parseJSON = withText "FeeEstimationMode" $ \case
-        "conservative" -> pure Conservative
-        "economical" -> pure Economical
-        "unset" -> pure Unset
-        other -> fail $ "Unknown fee estimation mode: " <> Text.unpack other
-
-instance ToJSON FeeEstimationMode where
-    toJSON = \case
-        Conservative -> "conservative"
-        Economical -> "economical"
-        Unset -> "unset"
 
 {- | Send multiple times. Amounts are double-precision floating point numbers.
  Requires wallet passphrase to be set with walletpassphrase call if wallet is
@@ -2080,8 +2124,8 @@ createFundedPsbt ::
 
 -- | @since 0.3.0.0
 data ProcessPsbtResponse = ProcessPsbtResponse
-    { -- | The base64-encoded partially signed transaction
-      processPsbtPsbt :: Text
+    { -- | The partially signed transaction
+      processPsbtPsbt :: PartiallySignedTransaction
     , -- | If the transaction has a complete set of signatures
       processPsbtComplete :: Bool
     }
@@ -2089,7 +2133,9 @@ data ProcessPsbtResponse = ProcessPsbtResponse
 
 instance FromJSON ProcessPsbtResponse where
     parseJSON = withObject "ProcessPsbtResponse" $ \obj ->
-        ProcessPsbtResponse <$> obj .: "psbt" <*> obj .: "complete"
+        ProcessPsbtResponse
+            <$> (unBase64Encoded <$> obj .: "psbt")
+            <*> obj .: "complete"
 
 {- | Removes the wallet encryption key from memory, locking the wallet.  After
  calling this method, you will need to call walletpassphrase again before being

@@ -7,6 +7,7 @@ import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Test.Tasty (defaultMain, testGroup)
 
 import Bitcoin.Core.Regtest (withBitcoind)
+import Bitcoin.Core.Test.Generator (testGenerator)
 import Bitcoin.Core.Test.Misc (miscRPC)
 import Bitcoin.Core.Test.PSBT (psbtRPC)
 import Bitcoin.Core.Test.Wallet (walletRPC)
@@ -21,4 +22,5 @@ main = withBitcoind 8449 $ \nodeHandle -> do
             [ miscRPC mgr nodeHandle
             , walletRPC mgr nodeHandle
             , psbtRPC mgr nodeHandle
+            , testGenerator mgr
             ]

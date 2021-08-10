@@ -31,14 +31,14 @@ library
         Servant.Bitcoind
 
     build-depends:
-          aeson >=1.4 && <1.6
-        , base >=4.12 && <4.15
+          aeson >=1.4 && <2.1
+        , base >=4.12 && <4.16
         , base64 ^>=0.4
         , bytestring >=0.10 && <0.12
         , bitcoin-compact-filters ^>=0.1
         , cereal ^>=0.5
         , containers ^>=0.6
-        , haskoin-core >=0.17.1 && <0.21
+        , haskoin-core >=0.17.1 && <0.22
         , http-client >=0.6 && <0.8
         , http-types ^>=0.12
         , mtl ^>=2.2
@@ -47,5 +47,5 @@ library
         , servant-client >=0.15 && <0.19
         , servant-jsonrpc-client >=1.0 && <1.2
         , text ^>=1.2
-        , time >=1.8 && <1.13
+        , time >=1.8 && <1.14
         , transformers >=0.5 && <0.7
