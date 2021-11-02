@@ -132,13 +132,10 @@ data PeerInfo = PeerInfo
     , pingTime :: Maybe Double
     , version :: Word64
     , inbound :: Bool
-    , addnode :: Bool
     , startingHeight :: BlockHeight
-    , banScore :: Word16
     , syncedHeaders :: Word32
     , syncedBlocks :: Word32
     , inflight :: [BlockHeight]
-    , whitelisted :: Bool
     , -- | in satoshis
       minFeeFilter :: Word64
     }
@@ -161,13 +158,10 @@ instance FromJSON PeerInfo where
             <*> o .: "pingtime"
             <*> o .: "version"
             <*> o .: "inbound"
-            <*> o .: "addnode"
             <*> o .: "startingheight"
-            <*> o .: "banscore"
             <*> o .: "synced_headers"
             <*> o .: "synced_blocks"
             <*> o .: "inflight"
-            <*> o .: "whitelisted"
             <*> (toSatoshis <$> o .: "minfeefilter")
 
 type NetworkRpc =

@@ -13,6 +13,7 @@
 * Changes the type used to represent `vout` values
 * Changes the binding of "getrawtransaction" to `getRawTransaction` 
 * Changes fields of `BlockHeader`
+* Removes some deprecated (in v0.21) fields
 
 ## 0.2.0.0 -- 2020-11-01 
 
