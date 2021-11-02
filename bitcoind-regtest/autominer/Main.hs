@@ -7,8 +7,8 @@ import Bitcoin.Core.RPC (
     BitcoindClient,
     Command (Add),
     addNode,
-    getBlockCount,
     getPeerInfo,
+    startingHeight,
     syncedBlocks,
  )
 import Bitcoin.Core.Regtest (
@@ -18,7 +18,8 @@ import Bitcoin.Core.Regtest (
     withBitcoind,
  )
 import Control.Concurrent (threadDelay)
-import Control.Monad (forM_, when)
+import Control.Exception (throwIO)
+import Control.Monad (forM_, (<=<))
 import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (listToMaybe)
 import Data.Text (pack)
@@ -70,7 +71,7 @@ main = do
         putStrLn $ "Listening for peers on 127.0.0.1:" <> show (nodeP2pPort nodeHandle)
         forM_ (show <$> peerPort config) $ \thePeerPort -> do
             putStrLn $ "Connecting to a peer on port " <> thePeerPort
-            runBitcoind mgr nodeHandle $ do
+            either throwIO pure <=< runBitcoind mgr nodeHandle $ do
                 addNode ("127.0.0.1:" <> pack thePeerPort) Add
                 waitSync
 
@@ -84,9 +85,12 @@ oscillatingFeeRate n
 
 waitSync :: BitcoindClient ()
 waitSync = do
-    syncedBlockCount <- fmap syncedBlocks . listToMaybe <$> getPeerInfo
-    ourBlockCount <- getBlockCount
-    when (Just ourBlockCount /= syncedBlockCount) $ do
+    getPeerInfo >>= maybe retry onPeerInfo . listToMaybe
+  where
+    onPeerInfo peerInfo
+        | syncedBlocks peerInfo < startingHeight peerInfo = retry
+        | otherwise = pure ()
+    retry = do
         liftIO $ putStrLn "Waiting for sync"
         liftIO $ threadDelay 1_000_000
         waitSync
