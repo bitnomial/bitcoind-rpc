@@ -1,4 +1,3 @@
-{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Bitcoin.Core.Test.Misc (
@@ -53,11 +52,15 @@ miscRPC mgr h =
                 , testRpc "getconnectioncount" getConnectionCount
                 , testRpc "getnodeaddresses" $ getNodeAddresses (Just 10)
                 , testRpc "getaddednodeinfo" $ getAddedNodeInfo Nothing
+                , testRpc "getdescriptorinfo" $
+                    getDescriptorInfo
+                        "wpkh([d34db33f/84h/0h/0h]0279be667ef9dcbbac55a06295Ce870b07029Bfcdb2dce28d959f2815b16f81798)"
                 , testRpc "listbanned" listBanned
                 , testRpc "getnettotals" getNetTotals
                 , testRpc "uptime" uptime
                 , testRpc "addnode" $ addNode "127.0.0.1:8448" Add
                 , testRpc "clearbanned" clearBanned
+                , testRpc "estimatesmartfee" $ estimateSmartFee 6 Nothing
                 ]
 
 testGenerate :: BitcoindClient [BlockHash]

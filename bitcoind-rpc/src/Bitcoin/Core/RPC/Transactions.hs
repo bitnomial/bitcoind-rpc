@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -10,6 +11,9 @@ module Bitcoin.Core.RPC.Transactions (
     sendTransaction,
     MempoolTestResult (..),
     testMempoolAccept,
+    FeeEstimationMode (..),
+    EstimateSmartFeeResponse (..),
+    estimateSmartFee,
 
     -- * PSBT
     PsbtMissing (..),
@@ -26,13 +30,13 @@ module Bitcoin.Core.RPC.Transactions (
     utxoUpdatePsbt,
 ) where
 
-import Data.Aeson (FromJSON (..), ToJSON (toJSON), object, withObject, (.:), (.:?), (.=))
+import Data.Aeson (FromJSON (..), ToJSON (toJSON), object, withObject, withText, (.:), (.:?), (.=))
 import Data.Proxy (Proxy (..))
 import Data.Scientific (Scientific)
 import qualified Data.Serialize as S
 import Data.Text (Text)
 import Data.Word (Word32, Word64)
-import Haskoin.Block (BlockHash)
+import Haskoin.Block (BlockHash, BlockHeight)
 import Haskoin.Transaction (PartiallySignedTransaction, Tx, TxHash)
 import Haskoin.Util (encodeHex)
 import Servant.API ((:<|>) (..))
@@ -48,6 +52,8 @@ import Data.Aeson.Utils (
     unBase64Encoded,
     (.=?),
  )
+import Data.Maybe (fromMaybe)
+import qualified Data.Text as Text
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
@@ -91,6 +97,7 @@ type RawTxRpc =
                 )
         :<|> BitcoindEndpoint "joinpsbts" (I [Text] -> C (Base64Encoded PartiallySignedTransaction))
         :<|> BitcoindEndpoint "utxoupdatepsbt" (I Text -> I [Descriptor] -> C (Base64Encoded PartiallySignedTransaction))
+        :<|> BitcoindEndpoint "estimatesmartfee" (I Int -> O FeeEstimationMode -> C EstimateSmartFeeResponse)
 
 sendRawTransaction
     :<|> getRawTransaction'
@@ -99,7 +106,8 @@ sendRawTransaction
     :<|> createPsbt_
     :<|> finalizePsbt
     :<|> joinPsbts_
-    :<|> utxoUpdatePsbt_ =
+    :<|> utxoUpdatePsbt_
+    :<|> estimateSmartFee =
         toBitcoindClient $ Proxy @RawTxRpc
 
 -- | Submit a raw transaction (serialized, hex-encoded) to local node and network.
@@ -143,7 +151,7 @@ data PsbtMissing = PsbtMissing
 instance FromJSON PsbtMissing where
     parseJSON = withObject "PsbtMissing" $ \obj ->
         PsbtMissing
-            <$> obj .: "pubkeys"
+            <$> (fromMaybe mempty <$> obj .:? "pubkeys")
             <*> obj .: "signatures"
             <*> obj .:? "redeemscript"
             <*> obj .:? "witnessscript"
@@ -340,3 +348,59 @@ utxoUpdatePsbt_ ::
     Text ->
     [Descriptor] ->
     BitcoindClient (Base64Encoded PartiallySignedTransaction)
+
+-- | @since 0.3.0.0
+data FeeEstimationMode
+    = Conservative
+    | Economical
+    | Unset
+    deriving (Eq, Show)
+
+instance FromJSON FeeEstimationMode where
+    parseJSON = withText "FeeEstimationMode" $ \case
+        "conservative" -> pure Conservative
+        "economical" -> pure Economical
+        "unset" -> pure Unset
+        other -> fail $ "Unknown fee estimation mode: " <> Text.unpack other
+
+instance ToJSON FeeEstimationMode where
+    toJSON = \case
+        Conservative -> "conservative"
+        Economical -> "economical"
+        Unset -> "unset"
+
+-- | @since 0.3.0.0
+data EstimateSmartFeeResponse = EstimateSmartFeeResponse
+    { -- | estimate fee rate in sats/vB (only present if no errors were encountered)
+      estimateSmartFeeFee :: Maybe Word64
+    , estimateSmartFeeErrors :: [Text]
+    , -- | block number where estimate was found.  The request target will be
+      -- clamped between 2 and the highest target fee estimation is able to return based
+      -- on how long it has been running. An error is returned if not enough transactions
+      -- and blocks have been observed to make an estimate for any number of blocks.
+      estimateSmartFeeBolcks :: BlockHeight
+    }
+    deriving (Eq, Show)
+
+instance FromJSON EstimateSmartFeeResponse where
+    parseJSON = withObject "EstimateSmartFeeResponse" $ \obj -> do
+        EstimateSmartFeeResponse
+            <$> (fmap changeUnits <$> obj .:? "feerate")
+            <*> (fromMaybe mempty <$> obj .:? "errors")
+            <*> obj .: "blocks"
+      where
+        -- BTC/kvb -> sats/vb
+        changeUnits = toSatoshis . (/ 1_000)
+
+{- | Estimates the approximate fee per kilobyte needed for a transaction to
+begin confirmation within conf_target blocks if possible and return the number
+of blocks for which the estimate is valid. Uses virtual transaction size as
+defined in BIP 141 (witness data is discounted).
+
+@since 0.3.0.0
+-}
+estimateSmartFee ::
+    -- | Confirmation target in blocks (1 - 1008)
+    Int ->
+    Maybe FeeEstimationMode ->
+    BitcoindClient EstimateSmartFeeResponse

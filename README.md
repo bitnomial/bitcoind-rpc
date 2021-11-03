@@ -20,22 +20,22 @@ This package provides some tooling for testing a bitcoin-core integration.  Feat
 * Spin up ephemeral regtest nodes
 * Fund outputs in one line
 * Simple HD wallet
+* Autominer to generate blocks with many transactions
 
 
 Supported bitcoin-core versions
 ----
 
-Non-wallet RPC calls:
+Full support only for `v22.0`.
+
+Limited support for:
 
 * `v0.19.1`
 * `v0.20.0`
 * `v0.20.1`
 * `v0.21.0`
 * `v0.21.1`
-
-Wallet and PSBT RPC calls: 
-
-* `v0.21.0` - except where noted
+* `v0.21.0` 
 * `v0.21.1`
 
 Test suite

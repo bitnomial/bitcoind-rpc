@@ -23,4 +23,9 @@
     url = "https://bitcoincore.org/bin/bitcoin-core-0.21.1/bitcoin-0.21.1-x86_64-linux-gnu.tar.gz";
     sha256 = "05zn4dizi4kwbqid0vds90dwap6k6zrg8pv8qc7sxv2wg82klv9q";
   };
+
+  v22-0 = builtins.fetchTarball {
+    url = "https://bitcoincore.org/bin/bitcoin-core-22.0/bitcoin-22.0-x86_64-linux-gnu.tar.gz";
+    sha256 = "08l18bihda64bka4lhv046kdcjgwwngwws6v08lnrkp8j0l2l2rk";
+  };
 }

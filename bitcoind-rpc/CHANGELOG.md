@@ -2,11 +2,18 @@
 
 ## 0.3.0.0 -- 2021-??-??
 
-* Add the "Wallet" section of the RPC
-* Add RPC commands concerned with PSBTs
+* Adds RPC commands
+    * Wallet section of the RPC
+    * Some commands concerned with PSBTs
+    * "getdescriptorinfo"
+    * "importpubkey"
+    * "estimatesmartfee"
+* Improves "importmulti"
 * Change handling of optional parameters
 * Changes the type used to represent `vout` values
 * Changes the binding of "getrawtransaction" to `getRawTransaction` 
+* Changes fields of `BlockHeader`
+* Removes some deprecated (in v0.21) fields
 
 ## 0.2.0.0 -- 2020-11-01 
 

@@ -142,7 +142,8 @@ data BlockHeader = BlockHeader
     , blockHeaderMedianTime :: UTCTime
     , blockHeaderNonce :: Word64
     , blockHeaderTxCount :: Int
-    , blockHeaderPrevHash :: Hash256
+    , blockHeaderPrevHash :: Maybe Hash256
+    , blockHeaderNextHash :: Maybe Hash256
     }
 
 instance FromJSON BlockHeader where
@@ -156,7 +157,8 @@ instance FromJSON BlockHeader where
             <*> (utcTime <$> o .: "mediantime")
             <*> o .: "nonce"
             <*> o .: "nTx"
-            <*> (o .: "previousblockhash" >>= parseFromHex)
+            <*> (o .:? "previousblockhash" >>= traverse parseFromHex)
+            <*> (o .:? "nextblockhash" >>= traverse parseFromHex)
 
 parseFromHex :: Serialize a => Text -> Parser a
 parseFromHex = either fail return . decodeFromHex

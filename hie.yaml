@@ -1,3 +1,5 @@
+---
+
 cradle:
   cabal:
     - path: "bitcoind-regtest/src/"
@@ -5,6 +7,9 @@ cradle:
 
     - path: "bitcoind-regtest/rpc-explorer/Main.hs"
       component: "bitcoind-regtest:exe:bitcoind-rpc-explorer"
+
+    - path: "bitcoind-regtest/autominer/Main.hs"
+      component: "bitcoind-regtest:exe:bitcoind-regtest-autominer"
 
     - path: "bitcoind-regtest/test/"
       component: "bitcoind-regtest:test:bitcoind-rpc-tests"

@@ -27,7 +27,7 @@ import System.Process (readProcessWithExitCode)
 import Bitcoin.Core.Regtest (
     NodeHandle,
     nodeAuth,
-    nodePort,
+    nodeRpcPort,
     withBitcoind,
  )
 
@@ -64,7 +64,7 @@ bitcoinCli h args = fix $ \go -> do
         else threadDelay 1_000_000 >> go
   where
     setupArgs =
-        [ "-rpcport=" <> show (nodePort h)
+        [ "-rpcport=" <> show (nodeRpcPort h)
         , "-rpcuser=" <> (unpack . basicAuthUsername . nodeAuth) h
         , "-rpcpassword=" <> (unpack . basicAuthPassword . nodeAuth) h
         ]

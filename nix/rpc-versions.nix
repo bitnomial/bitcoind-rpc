@@ -4,6 +4,7 @@ let pkgs = import <nixpkgs> {};
     rpcExplorer = bitcoindInstance: outFile: pkgs.writeScript "rpc-explorer"
       ''
       export PATH=${bitcoindInstance}/bin:$PATH
+      cabal build --flags rpc-explorer
       cabal run bitcoind-rpc-explorer -- --output ${outFile}
       '';
 
