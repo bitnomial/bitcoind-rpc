@@ -40,6 +40,7 @@ module Bitcoin.Core.RPC.Wallet (
     getReceivedByLabel,
     Category (..),
     TransactionDetails (..),
+    GetTxOutputDetails (..),
     GetTransactionResponse (..),
     getTransaction,
     WalletStateInfo (..),
