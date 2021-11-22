@@ -19,6 +19,7 @@ import Bitcoin.Core.RPC (
     ListUnspentOptions (ListUnspentOptions),
     PsbtInput,
     PsbtOutputs (PsbtOutputs),
+    withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
 import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v21_0)
@@ -28,7 +29,6 @@ import Bitcoin.Core.Test.Utils (
     initWallet,
     testRpc,
     toInput,
-    withWallet,
  )
 
 psbtRPC :: Manager -> NodeHandle -> TestTree

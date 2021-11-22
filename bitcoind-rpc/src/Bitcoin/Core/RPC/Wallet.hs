@@ -142,6 +142,7 @@ import Data.Aeson.Utils (
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
+    BitcoindWalletEndpoint,
     C,
     CX,
     DefFalse,
@@ -154,9 +155,9 @@ import Servant.Bitcoind (
  )
 
 type WalletRpc =
-    BitcoindEndpoint "abandontransaction" (I TxHash -> CX)
-        :<|> BitcoindEndpoint "abortrescan" (C Bool)
-        :<|> BitcoindEndpoint
+    BitcoindWalletEndpoint "abandontransaction" (I TxHash -> CX)
+        :<|> BitcoindWalletEndpoint "abortrescan" (C Bool)
+        :<|> BitcoindWalletEndpoint
                 "addmultisigaddress"
                 ( I Int ->
                   I [Text] ->
@@ -164,9 +165,9 @@ type WalletRpc =
                   O AddressType ->
                   C NewMultisigAddress
                 )
-        :<|> BitcoindEndpoint "backupwallet" (I FilePath -> CX)
-        :<|> BitcoindEndpoint "bumpfee" (I TxHash -> O BumpFeeOptions -> C BumpFeeResponse)
-        :<|> BitcoindEndpoint
+        :<|> BitcoindWalletEndpoint "backupwallet" (I FilePath -> CX)
+        :<|> BitcoindWalletEndpoint "bumpfee" (I TxHash -> O BumpFeeOptions -> C BumpFeeResponse)
+        :<|> BitcoindWalletEndpoint
                 "createwallet"
                 ( I Text ->
                   O Bool ->
@@ -178,42 +179,42 @@ type WalletRpc =
                   O Bool ->
                   C LoadWalletResponse
                 )
-        :<|> BitcoindEndpoint "dumpprivkey" (I Text -> C Text)
-        :<|> BitcoindEndpoint "dumpwallet" (I FilePath -> C DumpWalletResponse)
-        :<|> BitcoindEndpoint "encryptwallet" (I Text -> C Text)
-        :<|> BitcoindEndpoint "getaddressesbylabel" (I Text -> C (Map Text Purpose))
-        :<|> BitcoindEndpoint "getaddressinfo" (I Text -> C AddressInfo)
-        :<|> BitcoindEndpoint "getbalance" (O Text -> O Int -> O Bool -> O Bool -> C Scientific)
-        :<|> BitcoindEndpoint "getbalances" (C Balances)
-        :<|> BitcoindEndpoint "getdescriptorinfo" (I Text -> C GetDescriptorResponse)
-        :<|> BitcoindEndpoint "getnewaddress" (O Text -> O AddressType -> C Text)
-        :<|> BitcoindEndpoint "getrawchangeaddress" (O AddressType -> C Text)
-        :<|> BitcoindEndpoint "getreceivedbyaddress" (I Text -> O Int -> C Scientific)
-        :<|> BitcoindEndpoint "getreceivedbylabel" (I Text -> O Int -> C Scientific)
-        :<|> BitcoindEndpoint
+        :<|> BitcoindWalletEndpoint "dumpprivkey" (I Text -> C Text)
+        :<|> BitcoindWalletEndpoint "dumpwallet" (I FilePath -> C DumpWalletResponse)
+        :<|> BitcoindWalletEndpoint "encryptwallet" (I Text -> C Text)
+        :<|> BitcoindWalletEndpoint "getaddressesbylabel" (I Text -> C (Map Text Purpose))
+        :<|> BitcoindWalletEndpoint "getaddressinfo" (I Text -> C AddressInfo)
+        :<|> BitcoindWalletEndpoint "getbalance" (O Text -> O Int -> O Bool -> O Bool -> C Scientific)
+        :<|> BitcoindWalletEndpoint "getbalances" (C Balances)
+        :<|> BitcoindWalletEndpoint "getdescriptorinfo" (I Text -> C GetDescriptorResponse)
+        :<|> BitcoindWalletEndpoint "getnewaddress" (O Text -> O AddressType -> C Text)
+        :<|> BitcoindWalletEndpoint "getrawchangeaddress" (O AddressType -> C Text)
+        :<|> BitcoindWalletEndpoint "getreceivedbyaddress" (I Text -> O Int -> C Scientific)
+        :<|> BitcoindWalletEndpoint "getreceivedbylabel" (I Text -> O Int -> C Scientific)
+        :<|> BitcoindWalletEndpoint
                 "gettransaction"
                 ( I TxHash ->
                   O Bool ->
                   F DefFalse Bool ->
                   C GetTransactionResponse
                 )
-        :<|> BitcoindEndpoint "getwalletinfo" (C WalletStateInfo)
-        :<|> BitcoindEndpoint "importaddress" (I Text -> O Text -> O Bool -> O Bool -> CX)
-        :<|> BitcoindEndpoint "importdescriptors" (I [DescriptorRequest] -> C [ImportResponse])
-        :<|> BitcoindEndpoint "importmulti" (I [ImportMultiRequest] -> O ImportMultiOptions -> C [ImportResponse])
-        :<|> BitcoindEndpoint "importprivkey" (I Text -> O Text -> O Bool -> CX)
+        :<|> BitcoindWalletEndpoint "getwalletinfo" (C WalletStateInfo)
+        :<|> BitcoindWalletEndpoint "importaddress" (I Text -> O Text -> O Bool -> O Bool -> CX)
+        :<|> BitcoindWalletEndpoint "importdescriptors" (I [DescriptorRequest] -> C [ImportResponse])
+        :<|> BitcoindWalletEndpoint "importmulti" (I [ImportMultiRequest] -> O ImportMultiOptions -> C [ImportResponse])
+        :<|> BitcoindWalletEndpoint "importprivkey" (I Text -> O Text -> O Bool -> CX)
         -- WAIT importprunedfunds "rawtransaction" "txoutproof"
-        --      :<|> BitcoindEndpoint "importprunedfunds" ()
-        :<|> BitcoindEndpoint "importpubkey" (I PubKeyI -> O Text -> O Bool -> CX)
+        --      :<|> BitcoindWalletEndpoint "importprunedfunds" ()
+        :<|> BitcoindWalletEndpoint "importpubkey" (I PubKeyI -> O Text -> O Bool -> CX)
         :<|> BitcoindEndpoint "importwallet" (I FilePath -> CX)
         -- WAIT keypoolrefill ( newsize )
-        --      :<|> BitcoindEndpoint "keypoolrefill" ()
+        --      :<|> BitcoindWalletEndpoint "keypoolrefill" ()
         -- WAIT listaddressgroupings
-        --      :<|> BitcoindEndpoint "listaddressgroupings" ()
-        :<|> BitcoindEndpoint "listdescriptors" (C [DescriptorDetails])
-        :<|> BitcoindEndpoint "listlabels" (O Text -> C [Text])
-        :<|> BitcoindEndpoint "listlockunspent" (C [JsonOutPoint])
-        :<|> BitcoindEndpoint
+        --      :<|> BitcoindWalletEndpoint "listaddressgroupings" ()
+        :<|> BitcoindWalletEndpoint "listdescriptors" (C [DescriptorDetails])
+        :<|> BitcoindWalletEndpoint "listlabels" (O Text -> C [Text])
+        :<|> BitcoindWalletEndpoint "listlockunspent" (C [JsonOutPoint])
+        :<|> BitcoindWalletEndpoint
                 "listreceivedbyaddress"
                 ( O Int ->
                   O Bool ->
@@ -221,14 +222,14 @@ type WalletRpc =
                   O Text ->
                   C [ListReceivedResponse]
                 )
-        :<|> BitcoindEndpoint
+        :<|> BitcoindWalletEndpoint
                 "listreceivedbylabel"
                 ( O Int ->
                   O Bool ->
                   O Bool ->
                   C [ListReceivedByLabelResponse]
                 )
-        :<|> BitcoindEndpoint
+        :<|> BitcoindWalletEndpoint
                 "listsinceblock"
                 ( O BlockHash ->
                   O Int ->
@@ -236,7 +237,7 @@ type WalletRpc =
                   O Bool ->
                   C ListSinceBlockResponse
                 )
-        :<|> BitcoindEndpoint
+        :<|> BitcoindWalletEndpoint
                 "listtransactions"
                 ( O Text ->
                   O Int ->
@@ -244,7 +245,7 @@ type WalletRpc =
                   O Bool ->
                   C [TransactionDetails]
                 )
-        :<|> BitcoindEndpoint
+        :<|> BitcoindWalletEndpoint
                 "listunspent"
                 ( O Int ->
                   O Int ->
@@ -254,22 +255,22 @@ type WalletRpc =
                   C [OutputDetails]
                 )
         -- WAIT listwalletdir
-        --      :<|> BitcoindEndpoint "listwalletdir" ()
+        --      :<|> BitcoindWalletEndpoint "listwalletdir" ()
         :<|> BitcoindEndpoint "listwallets" (C [Text])
         :<|> BitcoindEndpoint "loadwallet" (I Text -> O Bool -> C LoadWalletResponse)
-        :<|> BitcoindEndpoint "lockunspent" (I Bool -> I [PrevTx] -> C Bool)
-        :<|> BitcoindEndpoint "psbtbumpfee" (I TxHash -> O BumpFeeOptions -> C BumpFeeResponse)
+        :<|> BitcoindWalletEndpoint "lockunspent" (I Bool -> I [PrevTx] -> C Bool)
+        :<|> BitcoindWalletEndpoint "psbtbumpfee" (I TxHash -> O BumpFeeOptions -> C BumpFeeResponse)
         -- WAIT removeprunedfunds "txid"
-        --      :<|> BitcoindEndpoint "removeprunedfunds" ()
-        :<|> BitcoindEndpoint
+        --      :<|> BitcoindWalletEndpoint "removeprunedfunds" ()
+        :<|> BitcoindWalletEndpoint
                 "rescanblockchain"
                 ( O BlockHeight ->
                   O BlockHeight ->
                   C RescanResponse
                 )
         -- WAIT send [{"address":amount},{"data":"hex"},...] ( conf_target "estimate_mode" fee_rate options )
-        --      :<|> BitcoindEndpoint "send" ()
-        :<|> BitcoindEndpoint
+        --      :<|> BitcoindWalletEndpoint "send" ()
+        :<|> BitcoindWalletEndpoint
                 "sendmany"
                 ( F EmptyString Text ->
                   I (Map Text Text) ->
@@ -283,7 +284,7 @@ type WalletRpc =
                   F DefFalse Bool ->
                   C TxHash
                 )
-        :<|> BitcoindEndpoint
+        :<|> BitcoindWalletEndpoint
                 "sendtoaddress"
                 ( I Text ->
                   I Text ->
@@ -299,13 +300,13 @@ type WalletRpc =
                   C TxHash
                 )
         -- WAIT sethdseed ( newkeypool "seed" )
-        --      :<|> BitcoindEndpoint "sethdseed" ()
-        :<|> BitcoindEndpoint "setlabel" (I Text -> I Text -> CX)
-        :<|> BitcoindEndpoint "settxfee" (I Text -> C Bool)
+        --      :<|> BitcoindWalletEndpoint "sethdseed" ()
+        :<|> BitcoindWalletEndpoint "setlabel" (I Text -> I Text -> CX)
+        :<|> BitcoindWalletEndpoint "settxfee" (I Text -> C Bool)
         -- WAIT setwalletflag "flag" ( value )
-        --      :<|> BitcoindEndpoint "setwalletflag" ()
-        :<|> BitcoindEndpoint "signmessage" (I Text -> I Text -> C Text)
-        :<|> BitcoindEndpoint
+        --      :<|> BitcoindWalletEndpoint "setwalletflag" ()
+        :<|> BitcoindWalletEndpoint "signmessage" (I Text -> I Text -> C Text)
+        :<|> BitcoindWalletEndpoint
                 "signrawtransactionwithwallet"
                 ( I Text ->
                   I [PrevTx] ->
@@ -314,8 +315,8 @@ type WalletRpc =
                 )
         :<|> BitcoindEndpoint "unloadwallet" (O Text -> O Bool -> C UnloadWalletResponse)
         -- WAIT upgradewallet ( version )
-        --      :<|> BitcoindEndpoint "upgradewallet" ()
-        :<|> BitcoindEndpoint
+        --      :<|> BitcoindWalletEndpoint "upgradewallet" ()
+        :<|> BitcoindWalletEndpoint
                 "walletcreatefundedpsbt"
                 ( I [PsbtInput] ->
                   I PsbtOutputs ->
@@ -325,11 +326,11 @@ type WalletRpc =
                   C CreatePsbtResponse
                 )
         -- WAIT walletlock
-        :<|> BitcoindEndpoint "walletlock" CX
-        :<|> BitcoindEndpoint "walletpassphrase" (I Text -> I Int -> CX)
+        :<|> BitcoindWalletEndpoint "walletlock" CX
+        :<|> BitcoindWalletEndpoint "walletpassphrase" (I Text -> I Int -> CX)
         -- WAIT walletpassphrasechange "oldpassphrase" "newpassphrase"
-        --      :<|> BitcoindEndpoint "walletpassphrasechange" ()
-        :<|> BitcoindEndpoint
+        --      :<|> BitcoindWalletEndpoint "walletpassphrasechange" ()
+        :<|> BitcoindWalletEndpoint
                 "walletprocesspsbt"
                 ( I Text ->
                   O Bool ->

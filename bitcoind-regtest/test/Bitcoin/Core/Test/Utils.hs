@@ -10,7 +10,6 @@ module Bitcoin.Core.Test.Utils (
     walletPassword,
     unlockWallet,
     initWallet,
-    withWallet,
     generate,
     toInput,
 ) where
@@ -58,11 +57,7 @@ unlockWallet :: BitcoindClient ()
 unlockWallet = RPC.walletPassphrase walletPassword 10
 
 initWallet :: Text -> BitcoindClient ()
-initWallet name = void $ createWallet name >> RPC.unloadWallet (Just name) Nothing
-
-withWallet :: Text -> BitcoindClient a -> BitcoindClient a
-withWallet name task =
-    RPC.loadWallet name Nothing >> task <* RPC.unloadWallet (Just name) Nothing
+initWallet name = void $ createWallet name
 
 generate :: BitcoindClient ()
 generate = do
