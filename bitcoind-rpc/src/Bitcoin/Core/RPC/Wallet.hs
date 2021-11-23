@@ -211,7 +211,7 @@ type WalletRpc =
         --      :<|> BitcoindWalletEndpoint "keypoolrefill" ()
         -- WAIT listaddressgroupings
         --      :<|> BitcoindWalletEndpoint "listaddressgroupings" ()
-        :<|> BitcoindWalletEndpoint "listdescriptors" (C [DescriptorDetails])
+        :<|> BitcoindWalletEndpoint "listdescriptors" (C ListDescriptorsResponse)
         :<|> BitcoindWalletEndpoint "listlabels" (O Text -> C [Text])
         :<|> BitcoindWalletEndpoint "listlockunspent" (C [JsonOutPoint])
         :<|> BitcoindWalletEndpoint
@@ -366,7 +366,7 @@ abandonTransaction
     :<|> importPrivKey
     :<|> importPubKey
     :<|> importWallet
-    :<|> listDescriptors
+    :<|> listDescriptors_
     :<|> listLabels_
     :<|> listLockUnspent_
     :<|> listReceivedByAddress
@@ -1388,12 +1388,22 @@ instance FromJSON DescriptorDetails where
             Just{} -> fail "Malformed range"
             Nothing -> pure Nothing
 
+newtype ListDescriptorsResponse = ListDescriptorsResponse
+    { unListDescriptorResponse :: [DescriptorDetails]
+    }
+
+instance FromJSON ListDescriptorsResponse where
+    parseJSON = withObject "ListDescriptorResponse" $ fmap ListDescriptorsResponse . (.: "descriptors")
+
+listDescriptors_ :: BitcoindClient ListDescriptorsResponse
+
 {- | List descriptors imported into a descriptor-enabled wallet.  Supported
 starting in version @0.21.1@.
 
  @since 0.3.0.0
 -}
 listDescriptors :: BitcoindClient [DescriptorDetails]
+listDescriptors = unListDescriptorResponse <$> listDescriptors_
 
 {- | Returns the list of all labels, or labels that are assigned to addresses
  with a specific purpose.
