@@ -30,6 +30,7 @@ import Bitcoin.Core.RPC (
     PrevTx (PrevTx),
     PsbtOutputs (PsbtOutputs),
     Purpose (PurposeRecv),
+    withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
 import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v20_1, v21_1)
@@ -42,7 +43,6 @@ import Bitcoin.Core.Test.Utils (
     testRpc,
     unlockWallet,
     walletPassword,
-    withWallet,
  )
 
 walletRPC :: Manager -> NodeHandle -> TestTree
@@ -246,21 +246,20 @@ toOutPoint = OutPoint <$> RPC.outputTxId <*> fromIntegral . RPC.outputVOut
 testDescriptorCommands :: Version -> BitcoindClient ()
 testDescriptorCommands v = do
     RPC.createWallet walletName Nothing Nothing walletPassword (Just True) (Just True) Nothing Nothing
-    RPC.walletPassphrase walletPassword 30
-    RPC.getNewAddress (Just "internal") Nothing
-    RPC.importDescriptors
-        [ DescriptorRequest
-            theDescriptor
-            Nothing
-            (Just (0, Just 100))
-            Nothing
-            Nothing
-            Nothing
-            (Just "imported-descriptor")
-        ]
-    when (v > v21_1) $ RPC.listDescriptors >>= shouldMatch 2 . length
-    RPC.unloadWallet (Just walletName) Nothing
-    pure ()
+    withWallet walletName $ do
+        RPC.walletPassphrase walletPassword 30
+        RPC.getNewAddress (Just "internal") Nothing
+        RPC.importDescriptors
+            [ DescriptorRequest
+                theDescriptor
+                Nothing
+                (Just (0, Just 100))
+                Nothing
+                Nothing
+                Nothing
+                (Just "imported-descriptor")
+            ]
+        when (v > v21_1) $ RPC.listDescriptors >>= shouldMatch 6 . length
   where
     walletName = "descriptorWallet"
     -- Taken from bitcoind descriptor wallet documentation

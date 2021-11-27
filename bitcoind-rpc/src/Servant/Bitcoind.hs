@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -24,8 +25,10 @@ module Servant.Bitcoind (
     DefZero,
 
     -- * Types related to the client
-    BitcoindClient,
+    BitcoindClient (..),
+    WalletName,
     BitcoindEndpoint,
+    BitcoindWalletEndpoint,
     BitcoindException (..),
 
     -- * Client generation mechanism
@@ -34,6 +37,9 @@ module Servant.Bitcoind (
 ) where
 
 import Control.Exception (Exception)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.State.Strict (StateT, get)
+import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT (..))
 import Control.Monad.Trans.Reader (ReaderT (..))
 import Data.Aeson (
@@ -48,9 +54,9 @@ import Data.Bifunctor (first)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.TypeLits (KnownSymbol, Symbol)
-import Servant.API ((:<|>) (..), (:>))
+import Servant.API (CaptureAll, (:<|>) (..), (:>))
 import Servant.API.BasicAuth (BasicAuth, BasicAuthData)
-import Servant.Client (ClientError, ClientM, client)
+import Servant.Client (Client, ClientError, ClientM, client)
 import Servant.Client.JsonRpc (
     JsonRpc,
     JsonRpcErr (..),
@@ -76,6 +82,7 @@ instance ToJSON BitcoindException where
 instance Exception BitcoindException
 
 data BitcoindEndpoint (m :: Symbol) a
+data BitcoindWalletEndpoint (m :: Symbol) a
 
 -- | A client returning @Either BitcoindException r@
 data C r
@@ -126,17 +133,34 @@ instance
     type TheBitcoindClient (BitcoindEndpoint m a) = RewriteTo a
     toBitcoindClient _ =
         rewriteRpc (Proxy @a)
+            . ignorePath
             . trimArguments
             . client
             $ Proxy @(BitcoindRpc m)
       where
-        trimArguments f authData args = f authData $ dropTrailingNothings args
-        dropTrailingNothings [] = []
-        dropTrailingNothings (x : xs) = case dropTrailingNothings xs of
-            []
-                | x == Null -> []
-                | otherwise -> [x]
-            adjustedTail -> x : adjustedTail
+        ignorePath f auth _ = f auth mempty
+
+instance
+    (Rewrite a, RewriteFrom a ~ NakedClient, KnownSymbol m) =>
+    HasBitcoindClient (BitcoindWalletEndpoint m a)
+    where
+    type TheBitcoindClient (BitcoindWalletEndpoint m a) = RewriteTo a
+    toBitcoindClient _ =
+        rewriteRpc (Proxy @a)
+            . trimArguments
+            . client
+            $ Proxy @(BitcoindRpc m)
+
+trimArguments :: Client m (BitcoindRpc api) -> Client m (BitcoindRpc api)
+trimArguments f authData path args = f authData path $ dropTrailingNothings args
+
+dropTrailingNothings :: [Value] -> [Value]
+dropTrailingNothings [] = []
+dropTrailingNothings (x : xs) = case dropTrailingNothings xs of
+    []
+        | x == Null -> []
+        | otherwise -> [x]
+    adjustedTail -> x : adjustedTail
 
 instance
     (HasBitcoindClient x, HasBitcoindClient y) =>
@@ -145,12 +169,26 @@ instance
     type TheBitcoindClient (x :<|> y) = TheBitcoindClient x :<|> TheBitcoindClient y
     toBitcoindClient _ = toBitcoindClient (Proxy @x) :<|> toBitcoindClient (Proxy @y)
 
-type BitcoindRpc m = BasicAuth "bitcoind" () :> JsonRpc m [Value] String Value
+type BitcoindRpc m =
+    BasicAuth "bitcoind" ()
+        :> CaptureAll "wallet" Text
+        :> JsonRpc m [Value] String Value
 
-type BitcoindClient = ReaderT BasicAuthData (ExceptT BitcoindException ClientM)
+type WalletName = Text
+
+newtype BitcoindClient a = BitcoindClient
+    { unBitcoindClient :: ReaderT BasicAuthData (StateT (Maybe WalletName) (ExceptT BitcoindException ClientM)) a
+    }
+    deriving (Functor, Applicative, Monad, MonadIO)
+
+getWalletPath :: Monad m => StateT (Maybe WalletName) m [Text]
+getWalletPath = maybe mempty toPath <$> get
+  where
+    toPath name = ["wallet", name]
 
 type NakedClient =
     BasicAuthData ->
+    [Text] ->
     [Value] ->
     ClientM (JsonRpcResponse String Value)
 
@@ -169,7 +207,9 @@ instance Rewrite CX where
     type RewriteFrom CX = NakedClient
     type RewriteTo CX = BitcoindClient ()
 
-    rewriteRpc _ f = ReaderT $ ExceptT . fmap repack . (`f` [])
+    rewriteRpc _ f = BitcoindClient . ReaderT $ \auth -> do
+        path <- getWalletPath
+        lift . ExceptT $ repack <$> f auth path mempty
       where
         repack = \case
             Ack _ -> return ()
@@ -181,7 +221,9 @@ instance FromJSON r => Rewrite (C r) where
     type RewriteFrom (C r) = NakedClient
     type RewriteTo (C r) = BitcoindClient r
 
-    rewriteRpc _ f = ReaderT $ ExceptT . fmap repack . (`f` [])
+    rewriteRpc _ f = BitcoindClient . ReaderT $ \auth -> do
+        path <- getWalletPath
+        lift . ExceptT $ repack <$> f auth path mempty
       where
         repack = \case
             Result _ x -> first DecodingError $ Ae.parseEither parseJSON x
@@ -196,7 +238,8 @@ instance
     type RewriteFrom (I a -> b) = NakedClient
     type RewriteTo (I a -> b) = a -> RewriteTo b
 
-    rewriteRpc _ f x = rewriteRpc (Proxy @b) $ \auth args -> f auth (toJSON x : args)
+    rewriteRpc _ f x = rewriteRpc (Proxy @b) $ \auth path args ->
+        f auth path (toJSON x : args)
 
 -- | Add an optional argument
 instance
@@ -206,7 +249,8 @@ instance
     type RewriteFrom (O a -> b) = NakedClient
     type RewriteTo (O a -> b) = Maybe a -> RewriteTo b
 
-    rewriteRpc _ f x = rewriteRpc (Proxy @b) $ \auth args -> f auth (toJSON x : args)
+    rewriteRpc _ f x = rewriteRpc (Proxy @b) $ \auth path args ->
+        f auth path (toJSON x : args)
 
 -- | Add a fixed argument
 instance
@@ -218,7 +262,7 @@ instance
 
     rewriteRpc _ f = rewriteRpc (Proxy @b) f'
       where
-        f' auth args = f auth $ fixedVal : args
+        f' auth path args = f auth path $ fixedVal : args
         fixedVal = toJSON @a . getDefault $ Proxy @x
 
 instance (Rewrite a, Rewrite b) => Rewrite (a :<|> b) where

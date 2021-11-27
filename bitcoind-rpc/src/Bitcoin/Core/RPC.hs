@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
 {- |
  Module:      Bitcoin.Core.RPC
@@ -60,6 +61,8 @@ module Bitcoin.Core.RPC (
     getNetTotals,
 
     -- * Wallet
+    WalletName,
+    withWallet,
     abandonTransaction,
     abortRescan,
     AddressType (..),
@@ -160,12 +163,15 @@ import Bitcoin.Core.RPC.Network
 import Bitcoin.Core.RPC.Responses
 import Bitcoin.Core.RPC.Transactions
 import Bitcoin.Core.RPC.Wallet
+import Control.Monad.State.Strict (evalStateT, get, put, runStateT)
+import Control.Monad.Trans.Class (lift)
 import Data.Aeson (Value)
 import qualified Data.Aeson as Ae
 import Network.HTTP.Types (statusCode)
 import Servant.Bitcoind (
-    BitcoindClient,
+    BitcoindClient (..),
     BitcoindException (..),
+    WalletName,
  )
 import Servant.Client.JsonRpc (JsonRpcErr (JsonRpcErr), JsonRpcResponse (Errors))
 
@@ -180,7 +186,12 @@ runBitcoind ::
     BitcoindClient a ->
     IO (Either BitcoindException a)
 runBitcoind mgr host port auth =
-    fmap consolidateErrors . (`runClientM` env) . runExceptT . (`runReaderT` auth)
+    fmap consolidateErrors
+        . (`runClientM` env)
+        . runExceptT
+        . flip evalStateT Nothing
+        . (`runReaderT` auth)
+        . unBitcoindClient
   where
     env = mkBitcoindEnv mgr host port
 
@@ -188,9 +199,13 @@ runBitcoind mgr host port auth =
  'BitcoindClient' context
 -}
 tryBitcoind :: BitcoindClient a -> BitcoindClient (Either BitcoindException a)
-tryBitcoind (ReaderT f) = ReaderT $ \x ->
-    let ExceptT task = f x
-     in ExceptT . fmap Right $ catchError task (pure . Left . decodeErrorResponse)
+tryBitcoind (BitcoindClient (ReaderT f)) = BitcoindClient . ReaderT $ \x -> do
+    walletName <- get
+    let ExceptT task = runStateT (f x) walletName
+        fixState (result, newState) = result <$ put newState
+    (lift . ExceptT . fmap Right)
+        (catchError task (pure . Left . decodeErrorResponse))
+        >>= traverse fixState
 
 -- | Send a RPC call to bitcoind using credentials from a cookie file
 cookieClient ::
@@ -235,6 +250,17 @@ decodeErrorResponse :: ClientError -> BitcoindException
 decodeErrorResponse = \case
     FailureResponse _ response
         | (statusCode . responseStatusCode) response == 500
-          , Just (Errors _ (JsonRpcErr _ message _)) <- (Ae.decode @(JsonRpcResponse Value Value) . responseBody) response ->
+          , Just (Errors _ (JsonRpcErr _ message _)) <-
+                (Ae.decode @(JsonRpcResponse Value Value) . responseBody) response ->
             RpcException message
     otherError -> ClientException otherError
+
+{- | When multiple wallets are loaded, use this to specify one.  This function
+ does not load or unload wallets.
+-}
+withWallet :: WalletName -> BitcoindClient a -> BitcoindClient a
+withWallet name task = do
+    BitcoindClient . lift $ put (Just name)
+    x <- task
+    BitcoindClient . lift $ put Nothing
+    pure x

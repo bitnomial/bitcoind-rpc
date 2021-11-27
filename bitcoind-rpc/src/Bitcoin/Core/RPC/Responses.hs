@@ -43,6 +43,7 @@ module Bitcoin.Core.RPC.Responses (
     GetDescriptorResponse (..),
     Category (..),
     TransactionDetails (..),
+    GetTxOutputDetails (..),
     GetTransactionResponse (..),
     WalletStateInfo (..),
     DescriptorRequest (..),
