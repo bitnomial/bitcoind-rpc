@@ -27,6 +27,7 @@ import Control.Monad.Trans.State.Strict (evalStateT, get, gets, modify, put)
 import Data.ByteString.Base64 (encodeBase64)
 import Data.Maybe (fromJust)
 import Data.Sequence (Seq ((:<|)), (|>))
+import Data.Text (Text)
 
 processCoinbase :: Tx -> (OutPoint, Word64)
 processCoinbase tx0 = (OutPoint (txHash tx0) 0, outValue . head $ txOut tx0)
@@ -46,10 +47,12 @@ generateWithTransactions ::
     NodeHandle ->
     -- | Block interval (seconds per block)
     Int ->
+    -- | Get an external address.  This action /must not/ block.
+    IO (Maybe Text) ->
     -- | Mean fee rate at height
     (BlockHeight -> Word64) ->
     IO ()
-generateWithTransactions mgr nodeHandle blockInterval getMeanFeeRate =
+generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMeanFeeRate =
     either throwIO pure =<< runBitcoind mgr nodeHandle generator
   where
     generator = flip evalStateT emptyState $ do
@@ -133,7 +136,7 @@ generateWithTransactions mgr nodeHandle blockInterval getMeanFeeRate =
 
     spendSplitOutputs feeRate = useSpendable >>= lift . traverse (spendSplitOutput feeRate)
     spendSplitOutput feeRate (outPoint, amount) = do
-        recipient <- newAddress
+        recipient <- liftIO getExternalAddress >>= maybe newAddress pure
         spendOutput feeRate outPoint [(recipient, amount)]
 
     password = "password"

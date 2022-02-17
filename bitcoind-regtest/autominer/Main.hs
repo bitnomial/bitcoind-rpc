@@ -76,7 +76,7 @@ main = do
                 waitSync
 
         putStrLn "Generating blocks..."
-        generateWithTransactions mgr nodeHandle (blockInterval config) oscillatingFeeRate
+        generateWithTransactions mgr nodeHandle (blockInterval config) (pure Nothing) oscillatingFeeRate
 
 oscillatingFeeRate :: BlockHeight -> Word64
 oscillatingFeeRate n
