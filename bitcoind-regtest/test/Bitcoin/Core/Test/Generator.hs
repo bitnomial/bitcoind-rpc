@@ -25,7 +25,7 @@ testGenerator :: Manager -> TestTree
 testGenerator mgr = testCaseSteps "generateWithTransactions" $ \step ->
     withBitcoind 8459 $ \nodeHandle -> do
         step "Generate some blocks"
-        h <- async $ generateWithTransactions mgr nodeHandle 1 (const 20)
+        h <- async $ generateWithTransactions mgr nodeHandle 1 (pure Nothing) (const 20)
         link h
 
         runBitcoind mgr nodeHandle $ waitForBlocks 120
