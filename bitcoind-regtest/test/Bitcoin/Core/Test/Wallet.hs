@@ -27,7 +27,6 @@ import Bitcoin.Core.RPC (
     DescriptorRequest (DescriptorRequest),
     ListUnspentOptions (ListUnspentOptions),
     OutputDetails,
-    PrevTx (PrevTx),
     PsbtOutputs (PsbtOutputs),
     Purpose (PurposeRecv),
     withWallet,
@@ -185,11 +184,11 @@ testTransactionCommands = do
                 (Just True)
                 (ListUnspentOptions Nothing Nothing Nothing Nothing)
         liftIO . assertBool "At least one output" $ (not . null) unspent
-        RPC.lockUnspent False $ toPrevTx <$> unspent
+        RPC.lockUnspent False $ toOutPoint <$> unspent
         RPC.listLockUnspent >>= shouldMatch (toOutPoint <$> unspent)
 
         unlockWallet
-        RPC.lockUnspent True $ toPrevTx <$> unspent
+        RPC.lockUnspent True $ toOutPoint <$> unspent
         txId2 <-
             RPC.sendMany
                 (Map.fromList $ (,100_000) <$> addrs)
@@ -230,15 +229,6 @@ testTransactionCommands = do
             Nothing
             (Just True)
             (Just 1)
-
-    toPrevTx =
-        PrevTx
-            <$> RPC.outputTxId
-            <*> RPC.outputVOut
-            <*> RPC.outputScriptPubKey
-            <*> pure Nothing
-            <*> pure Nothing
-            <*> RPC.outputAmount
 
 toOutPoint :: OutputDetails -> OutPoint
 toOutPoint = OutPoint <$> RPC.outputTxId <*> fromIntegral . RPC.outputVOut

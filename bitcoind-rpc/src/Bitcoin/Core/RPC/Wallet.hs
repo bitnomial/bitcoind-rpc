@@ -139,6 +139,7 @@ import Data.Aeson.Utils (
     utcTime,
     (.=?),
  )
+import qualified Haskoin as H
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
@@ -258,7 +259,7 @@ type WalletRpc =
         --      :<|> BitcoindWalletEndpoint "listwalletdir" ()
         :<|> BitcoindEndpoint "listwallets" (C [Text])
         :<|> BitcoindEndpoint "loadwallet" (I Text -> O Bool -> C LoadWalletResponse)
-        :<|> BitcoindWalletEndpoint "lockunspent" (I Bool -> I [PrevTx] -> C Bool)
+        :<|> BitcoindWalletEndpoint "lockunspent" (I Bool -> I [PrevOutput] -> C Bool)
         :<|> BitcoindWalletEndpoint "psbtbumpfee" (I TxHash -> O BumpFeeOptions -> C BumpFeeResponse)
         -- WAIT removeprunedfunds "txid"
         --      :<|> BitcoindWalletEndpoint "removeprunedfunds" ()
@@ -376,7 +377,7 @@ abandonTransaction
     :<|> listUnspent
     :<|> listWallets
     :<|> loadWallet
-    :<|> lockUnspent
+    :<|> lockUnspent'
     :<|> psbtBumpFee
     :<|> rescanBlockchain
     :<|> sendMany_
@@ -1756,6 +1757,16 @@ loadWallet ::
     Maybe Bool ->
     BitcoindClient LoadWalletResponse
 
+newtype PrevOutput = PrevOutput OutPoint
+    deriving (Eq, Show)
+
+instance ToJSON PrevOutput where
+    toJSON (PrevOutput outPoint) =
+        object
+            [ "txid" .= H.outPointHash outPoint
+            , "vout" .= H.outPointIndex outPoint
+            ]
+
 {- | Updates list of temporarily unspendable outputs.  Temporarily lock
  (unlock=false) or unlock (unlock=true) specified transaction outputs.  If no
  transaction outputs are specified when unlocking then all current locked
@@ -1772,8 +1783,11 @@ lockUnspent ::
     -- | Whether to unlock (true) or lock (false) the specified transactions
     Bool ->
     -- | The transaction outputs and within each, the txid (string) vout (numeric).
-    [PrevTx] ->
+    [OutPoint] ->
     BitcoindClient Bool
+lockUnspent lock = lockUnspent' lock . fmap PrevOutput
+
+lockUnspent' :: Bool -> [PrevOutput] -> BitcoindClient Bool
 
 {- | Bumps the fee of an opt-in-RBF transaction T, replacing it with a new
  transaction B.  Returns a PSBT instead of creating and signing a new
