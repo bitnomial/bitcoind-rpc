@@ -136,8 +136,8 @@ data PeerInfo = PeerInfo
     , syncedHeaders :: Word32
     , syncedBlocks :: Word32
     , inflight :: [BlockHeight]
-    , -- | in satoshis
-      minFeeFilter :: Word64
+    , minFeeFilter :: Word64
+    -- ^ in satoshis
     }
     deriving (Eq, Show)
 

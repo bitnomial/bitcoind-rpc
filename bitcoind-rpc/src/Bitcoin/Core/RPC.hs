@@ -250,8 +250,8 @@ decodeErrorResponse :: ClientError -> BitcoindException
 decodeErrorResponse = \case
     FailureResponse _ response
         | (statusCode . responseStatusCode) response == 500
-          , Just (Errors _ (JsonRpcErr _ message _)) <-
-                (Ae.decode @(JsonRpcResponse Value Value) . responseBody) response ->
+        , Just (Errors _ (JsonRpcErr _ message _)) <-
+            (Ae.decode @(JsonRpcResponse Value Value) . responseBody) response ->
             RpcException message
     otherError -> ClientException otherError
 
