@@ -137,14 +137,14 @@ getRawTransaction h = fmap unHexEncoded . getRawTransaction' h
 
 -- | @since 0.3.0.0
 data PsbtMissing = PsbtMissing
-    { -- | Public key ID, hash160 of the public key, of a public key whose BIP 32 derivation path is missing
-      missingPubkeys :: [Text]
-    , -- | Public key ID, hash160 of the public key, of a public key whose signature is missing
-      missingSigs :: [Text]
-    , -- | Hash160 of the redeemScript that is missing
-      redeemScript :: Maybe Text
-    , -- | SHA256 of the witnessScript that is missing
-      witnessScript :: Maybe Text
+    { missingPubkeys :: [Text]
+    -- ^ Public key ID, hash160 of the public key, of a public key whose BIP 32 derivation path is missing
+    , missingSigs :: [Text]
+    -- ^ Public key ID, hash160 of the public key, of a public key whose signature is missing
+    , redeemScript :: Maybe Text
+    -- ^ Hash160 of the redeemScript that is missing
+    , witnessScript :: Maybe Text
+    -- ^ SHA256 of the witnessScript that is missing
     }
     deriving (Eq, Show)
 
@@ -158,13 +158,13 @@ instance FromJSON PsbtMissing where
 
 -- | @since 0.3.0.0
 data AnalyzePsbtInput = AnalyzePsbtInput
-    { -- | Whether a UTXO is provided
-      hasUtxo :: Bool
-    , -- | Whether the input is finalized
-      isFinal :: Bool
+    { hasUtxo :: Bool
+    -- ^ Whether a UTXO is provided
+    , isFinal :: Bool
+    -- ^ Whether the input is finalized
     , missing :: Maybe PsbtMissing
-    , -- | Role of the next person that this input needs to go to
-      next :: Maybe Text
+    , next :: Maybe Text
+    -- ^ Role of the next person that this input needs to go to
     }
     deriving (Eq, Show)
 
@@ -179,16 +179,16 @@ instance FromJSON AnalyzePsbtInput where
 -- | @since 0.3.0.0
 data AnalyzePsbtResponse = AnalyzePsbtResponse
     { analysePsbtInput :: [AnalyzePsbtInput]
-    , -- | Estimated vsize of the final signed transaction
-      analyzePsbtEstimatedVSize :: Maybe Int
-    , -- | Estimated feerate of the final signed transaction in sats/kB. Shown only if all UTXO slots in the PSBT have been filled.
-      analyzePsbtEstimatedFeeRate :: Maybe Scientific
-    , -- | The transaction fee paid. Shown only if all UTXO slots in the PSBT have been filled.
-      analyzePsbtFee :: Maybe Word64
-    , -- | Role of the next person that this psbt needs to go to
-      analyzePsbtNext :: Maybe Text
-    , -- | Error message if there is one
-      analyzePsbtError :: Maybe Text
+    , analyzePsbtEstimatedVSize :: Maybe Int
+    -- ^ Estimated vsize of the final signed transaction
+    , analyzePsbtEstimatedFeeRate :: Maybe Scientific
+    -- ^ Estimated feerate of the final signed transaction in sats/kB. Shown only if all UTXO slots in the PSBT have been filled.
+    , analyzePsbtFee :: Maybe Word64
+    -- ^ The transaction fee paid. Shown only if all UTXO slots in the PSBT have been filled.
+    , analyzePsbtNext :: Maybe Text
+    -- ^ Role of the next person that this psbt needs to go to
+    , analyzePsbtError :: Maybe Text
+    -- ^ Error message if there is one
     }
     deriving (Eq, Show)
 
@@ -213,12 +213,12 @@ analyzePsbt ::
 
 -- | @since 0.3.0.0
 data PsbtInput = PsbtInput
-    { -- | The transaction id
-      psbtInputTx :: TxHash
-    , -- | The output number
-      psbtInputVOut :: Word32
-    , -- | The sequence number
-      psbtInputSequence :: Maybe Int
+    { psbtInputTx :: TxHash
+    -- ^ The transaction id
+    , psbtInputVOut :: Word32
+    -- ^ The output number
+    , psbtInputSequence :: Maybe Int
+    -- ^ The sequence number
     }
     deriving (Eq, Show)
 
@@ -269,12 +269,12 @@ createPsbt_ ::
 
 -- | @since 0.3.0.0
 data FinalizePsbtResponse = FinalizePsbtResponse
-    { -- | The base64-encoded partially signed transaction if not extracted
-      finalizedPsbt :: Maybe PartiallySignedTransaction
-    , -- | The hex-encoded network transaction if extracted
-      finalizedTx :: Maybe Tx
-    , -- | If the transaction has a complete set of signatures
-      finalizeComplete :: Bool
+    { finalizedPsbt :: Maybe PartiallySignedTransaction
+    -- ^ The base64-encoded partially signed transaction if not extracted
+    , finalizedTx :: Maybe Tx
+    -- ^ The hex-encoded network transaction if extracted
+    , finalizeComplete :: Bool
+    -- ^ If the transaction has a complete set of signatures
     }
     deriving (Eq, Show)
 
@@ -371,14 +371,14 @@ instance ToJSON FeeEstimationMode where
 
 -- | @since 0.3.0.0
 data EstimateSmartFeeResponse = EstimateSmartFeeResponse
-    { -- | estimate fee rate in sats/vB (only present if no errors were encountered)
-      estimateSmartFeeFee :: Maybe Word64
+    { estimateSmartFeeFee :: Maybe Word64
+    -- ^ estimate fee rate in sats/vB (only present if no errors were encountered)
     , estimateSmartFeeErrors :: [Text]
-    , -- | block number where estimate was found.  The request target will be
-      -- clamped between 2 and the highest target fee estimation is able to return based
-      -- on how long it has been running. An error is returned if not enough transactions
-      -- and blocks have been observed to make an estimate for any number of blocks.
-      estimateSmartFeeBolcks :: BlockHeight
+    , estimateSmartFeeBolcks :: BlockHeight
+    -- ^ block number where estimate was found.  The request target will be
+    -- clamped between 2 and the highest target fee estimation is able to return based
+    -- on how long it has been running. An error is returned if not enough transactions
+    -- and blocks have been observed to make an estimate for any number of blocks.
     }
     deriving (Eq, Show)
 
