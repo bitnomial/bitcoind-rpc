@@ -35,13 +35,10 @@ import qualified Bitcoin.Core.RPC as RPC
 import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v20_1, v21_1)
 import Bitcoin.Core.Test.Utils (
     bitcoindTest,
-    createWallet,
     generate,
     initWallet,
     shouldMatch,
     testRpc,
-    unlockWallet,
-    walletPassword,
  )
 
 walletRPC :: Manager -> NodeHandle -> TestTree
@@ -62,7 +59,16 @@ walletRPC mgr h =
 
 testWalletCommands :: BitcoindClient ()
 testWalletCommands = do
-    loadWalletR <- createWallet walletName
+    loadWalletR <-
+        RPC.createWallet
+            walletName
+            Nothing
+            Nothing
+            walletPassword
+            (Just True)
+            Nothing
+            Nothing
+            Nothing
     liftIO $ RPC.loadWalletName loadWalletR @?= walletName
 
     RPC.listWallets >>= shouldMatch [walletName] . filter (not . Text.null)
@@ -82,7 +88,7 @@ testWalletCommands = do
     RPC.abortRescan
 
     RPC.walletLock
-    RPC.walletPassphrase "password" 60
+    RPC.walletPassphrase walletPassword 60
 
     RPC.setTxFee 1000
 
@@ -98,6 +104,7 @@ testWalletCommands = do
     void $ RPC.unloadWallet (Just walletName) Nothing
   where
     walletName = "testCreateWallet"
+    walletPassword = "abc123"
 
 testAddressCommands :: BitcoindClient ()
 testAddressCommands = do
@@ -126,7 +133,6 @@ testAddressCommands = do
         RPC.getAddressesByLabel label3 >>= shouldMatch [(newAddress, PurposeRecv)] . Map.toList
 
         RPC.addMultisigAddress 2 [newAddress2, newAddress3, newAddress4] Nothing Nothing
-        unlockWallet
         privKey <- RPC.dumpPrivKey newAddress
 
         signingAddress <- RPC.getNewAddress Nothing (Just Legacy)
@@ -135,7 +141,6 @@ testAddressCommands = do
         pure (privKey, newAddress2)
 
     withWallet wallet2 $ do
-        unlockWallet
         RPC.importPrivKey privKey (Just "priv-test") Nothing
         RPC.importAddress someAddress (Just "addr-test") (Just True) Nothing
   where
@@ -154,7 +159,6 @@ testTransactionCommands = do
 
     txId <- withWallet minerWallet $ do
         replicateM_ 200 generate
-        unlockWallet
         txId <- sendSimple addressA1 sendAmount1 "funding" "user-a"
         replicateM_ 200 generate
         pure txId
@@ -187,7 +191,6 @@ testTransactionCommands = do
         RPC.lockUnspent False $ toOutPoint <$> unspent
         RPC.listLockUnspent >>= shouldMatch (toOutPoint <$> unspent)
 
-        unlockWallet
         RPC.lockUnspent True $ toOutPoint <$> unspent
         txId2 <-
             RPC.sendMany
@@ -235,9 +238,8 @@ toOutPoint = OutPoint <$> RPC.outputTxId <*> fromIntegral . RPC.outputVOut
 
 testDescriptorCommands :: Version -> BitcoindClient ()
 testDescriptorCommands v = do
-    RPC.createWallet walletName Nothing Nothing walletPassword (Just True) (Just True) Nothing Nothing
+    RPC.createWallet walletName Nothing Nothing mempty (Just True) (Just True) Nothing Nothing
     withWallet walletName $ do
-        RPC.walletPassphrase walletPassword 30
         RPC.getNewAddress (Just "internal") Nothing
         RPC.importDescriptors
             [ DescriptorRequest
@@ -295,7 +297,6 @@ testPsbtCommands = do
                 }
 
     void . withWallet walletA $ do
-        unlockWallet
         RPC.createFundedPsbt mempty outputs Nothing (Just options) (Just True)
   where
     walletA = "psbtWallet-A"

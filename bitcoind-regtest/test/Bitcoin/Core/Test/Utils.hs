@@ -7,8 +7,6 @@ module Bitcoin.Core.Test.Utils (
 
     -- * Wallet
     createWallet,
-    walletPassword,
-    unlockWallet,
     initWallet,
     generate,
     toInput,
@@ -44,17 +42,11 @@ createWallet walletName =
         walletName
         Nothing
         Nothing
-        walletPassword
+        mempty
         (Just True)
         Nothing
         Nothing
         Nothing
-
-walletPassword :: Text
-walletPassword = "password"
-
-unlockWallet :: BitcoindClient ()
-unlockWallet = RPC.walletPassphrase walletPassword 10
 
 initWallet :: Text -> BitcoindClient ()
 initWallet name = void $ createWallet name

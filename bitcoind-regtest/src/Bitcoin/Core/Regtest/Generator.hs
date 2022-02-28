@@ -105,19 +105,17 @@ generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMean
 
     miningWallet = "bitcoin-regtest-generator.mine"
     floodingWallet = "bitcoin-regtest-generator.flood"
-    password = "password"
 
     newWallet name = do
         RPC.createWallet
             name
             Nothing
             Nothing
-            password
+            mempty
             Nothing
             Nothing
             Nothing
             Nothing
-        RPC.withWallet name $ RPC.walletPassphrase password 10_000
 
     initialize = do
         newWallet miningWallet
