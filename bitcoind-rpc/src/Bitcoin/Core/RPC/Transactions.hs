@@ -30,7 +30,16 @@ module Bitcoin.Core.RPC.Transactions (
     utxoUpdatePsbt,
 ) where
 
-import Data.Aeson (FromJSON (..), ToJSON (toJSON), object, withObject, withText, (.:), (.:?), (.=))
+import Data.Aeson (
+    FromJSON (..),
+    ToJSON (toJSON),
+    object,
+    withObject,
+    withText,
+    (.:),
+    (.:?),
+    (.=),
+ )
 import Data.Proxy (Proxy (..))
 import Data.Scientific (Scientific)
 import qualified Data.Serialize as S
@@ -43,7 +52,7 @@ import Servant.API ((:<|>) (..))
 
 import Data.Aeson.Utils (
     Base64Encoded,
-    HexEncoded (unHexEncoded),
+    HexEncoded (HexEncoded, unHexEncoded),
     partialObject,
     rangeToJSON,
     satsPerBTC,
@@ -79,7 +88,7 @@ instance FromJSON MempoolTestResult where
 type RawTxRpc =
     BitcoindEndpoint "sendrawtransaction" (I Text -> O Double -> C TxHash)
         :<|> BitcoindEndpoint "getrawtransaction" (I TxHash -> F DefFalse Bool -> O BlockHash -> C (HexEncoded Tx))
-        :<|> BitcoindEndpoint "testmempoolaccept" (I [Tx] -> O Double -> C [MempoolTestResult])
+        :<|> BitcoindEndpoint "testmempoolaccept" (I [HexEncoded Tx] -> O Double -> C [MempoolTestResult])
         :<|> BitcoindEndpoint "analyzepsbt" (I Text -> C AnalyzePsbtResponse)
         :<|> BitcoindEndpoint
                 "createpsbt"
@@ -101,7 +110,7 @@ type RawTxRpc =
 
 sendRawTransaction
     :<|> getRawTransaction'
-    :<|> testMempoolAccept
+    :<|> testMempoolAccept'
     :<|> analyzePsbt
     :<|> createPsbt_
     :<|> finalizePsbt
@@ -124,6 +133,12 @@ getRawTransaction' :: TxHash -> Maybe BlockHash -> BitcoindClient (HexEncoded Tx
  consensus or policy rules.
 -}
 testMempoolAccept :: [Tx] -> Maybe Double -> BitcoindClient [MempoolTestResult]
+testMempoolAccept = testMempoolAccept' . fmap HexEncoded
+
+testMempoolAccept' ::
+    [HexEncoded Tx] ->
+    Maybe Double ->
+    BitcoindClient [MempoolTestResult]
 
 {- | By default this function only works for mempool transactions. When called
  with a blockhash argument, getrawtransaction will return the transaction if

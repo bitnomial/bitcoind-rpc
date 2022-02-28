@@ -1,47 +1,84 @@
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Bitcoin.Core.Regtest.Generator (
     generateWithTransactions,
 ) where
 
+import Bitcoin.Core.RPC (
+    BitcoindClient,
+    ListUnspentOptions (ListUnspentOptions),
+ )
+import qualified Bitcoin.Core.RPC as RPC
+import Bitcoin.Core.Regtest.Framework (NodeHandle, oneBitcoin, runBitcoind)
+import Control.Arrow ((&&&))
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (async, link)
 import Control.Exception (throwIO)
-import Control.Monad (forever, replicateM)
+import Control.Monad (forever, replicateM, when, (>=>))
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.State.Strict (
+    StateT (StateT),
+    evalStateT,
+    gets,
+    mapStateT,
+    modify',
+ )
+import Data.ByteString (ByteString)
+import Data.Functor (void)
+import Data.List (uncons, unfoldr)
+import qualified Data.Map.Strict as Map
+import Data.Maybe (mapMaybe)
 import qualified Data.Serialize as S
+import Data.Text (Text)
 import Data.Word (Word64)
-import Haskoin.Block (BlockHeight, blockTxns)
+import Haskoin (
+    Script (Script),
+    TxHash,
+    TxIn (TxIn),
+ )
+import qualified Haskoin as H
+import Haskoin.Block (BlockHeight)
 import Haskoin.Transaction (
     OutPoint (..),
     Tx (..),
     TxOut (..),
-    txHash,
  )
 import Network.HTTP.Client (Manager)
 
-import qualified Bitcoin.Core.RPC as RPC
-import Bitcoin.Core.Regtest.Framework (NodeHandle, runBitcoind)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.State.Strict (evalStateT, get, gets, modify, put)
-import Data.ByteString.Base64 (encodeBase64)
-import Data.Maybe (fromJust)
-import Data.Sequence (Seq ((:<|)), (|>))
-import Data.Text (Text)
+-- | How much to pay out on each faucet request
+faucetPayment :: Word64
+faucetPayment = oneBitcoin
 
-processCoinbase :: Tx -> (OutPoint, Word64)
-processCoinbase tx0 = (OutPoint (txHash tx0) 0, outValue . head $ txOut tx0)
+-- | If the series count exceeds this value, stop generating series
+maxSeries :: Int
+maxSeries = seriesLength * seriesCount
 
-data GeneratorState = GeneratorState
-    { generatorSpendableOutputs :: [(OutPoint, Word64)]
-    , generatorUnspentCoinbases :: Seq (OutPoint, Word64)
-    }
+-- | The number of series in a group
+seriesCount :: Int
+seriesCount = length outputsPerSeries
 
-{- | Generate many transactions per block with a certain mean fee rate
+-- | How many transactions in a series to broadcast
+seriesLength :: Int
+seriesLength = 10
 
-FIXME For some reason @bitcoind@ refuses to sign transactions if we set
- @splitCount@ too high.  What's going on here?
--}
+-- | Initial amount per output
+amountPerOutput :: Word64
+amountPerOutput = 20000
+
+-- | This value determines the transaction series that will fill up the mempool
+outputsPerSeries :: [Word64]
+outputsPerSeries =
+    mconcat
+        [ replicate 20 100 -- 20 txs with 100 outputs
+        , replicate 30 5 -- 30 txs with 5 outputs
+        , replicate 100 2 -- 100 txs with 2 outputs
+        ]
+
+-- | Generate many transactions per block with a certain mean fee rate
 generateWithTransactions ::
     Manager ->
     NodeHandle ->
@@ -52,129 +89,234 @@ generateWithTransactions ::
     -- | Mean fee rate at height
     (BlockHeight -> Word64) ->
     IO ()
-generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMeanFeeRate =
-    either throwIO pure =<< runBitcoind mgr nodeHandle generator
-  where
-    generator = flip evalStateT emptyState $ do
-        initialize
-        forever $ do
-            sendTransactions
-            generatorGenerate
-            liftIO $ threadDelay (blockInterval * 1_000_000)
+generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMeanFeeRate = do
+    run initialize
 
-    emptyState = GeneratorState mempty mempty
+    (async >=> link) . run . RPC.withWallet miningWallet . waitRepeat 1 $ do
+        balance <- getBalance
+        when (balance >= faucetPayment) $
+            liftIO getExternalAddress >>= mapM_ fundAddress
+
+    run . flip evalStateT mempty . waitRepeat blockInterval $ do
+        mapStateT (RPC.withWallet floodingWallet) $ txFlood getMeanFeeRate
+        lift . generatorGenerate =<< getSeriesCount
+  where
+    run = runBitcoind mgr nodeHandle >=> either throwIO pure
+
+    miningWallet = "bitcoin-regtest-generator.mine"
+    floodingWallet = "bitcoin-regtest-generator.flood"
+
+    newWallet name = do
+        RPC.createWallet
+            name
+            Nothing
+            Nothing
+            mempty
+            Nothing
+            Nothing
+            Nothing
+            Nothing
 
     initialize = do
-        lift $
-            RPC.createWallet
-                "bitcoin-regtest-generator"
-                Nothing
-                Nothing
-                password
-                Nothing
-                Nothing
-                Nothing
-                Nothing
-        replicateM 100 generatorGenerate
+        newWallet miningWallet
+        newWallet floodingWallet
+        replicateM 100 $ generatorGenerate 0
 
-    generatorGenerate = do
-        coinbaseOutput <- lift $ do
-            addr <- newAddress
-            RPC.generateToAddress 1 addr Nothing
-                >>= fmap (processCoinbase . head . blockTxns)
-                    . RPC.getBlock
-                    . head
-        modify $ \state ->
-            state
-                { generatorUnspentCoinbases =
-                    generatorUnspentCoinbases state |> coinbaseOutput
-                }
+    generatorGenerate nSeries = do
+        addr <- RPC.withWallet miningWallet newAddress
+        RPC.generateToAddress 1 addr Nothing
+        balance <- RPC.withWallet miningWallet getBalance
+        when (balance >= satRequirement && nSeries <= maxSeries) fundFloodWallet
+
+    fundFloodWallet = do
+        addressAmounts <-
+            RPC.withWallet floodingWallet $
+                traverse getAddressAmount outputsPerSeries
+        feeRate <- getMeanFeeRate <$> RPC.getBlockCount
+        void . RPC.withWallet miningWallet $ spend feeRate addressAmounts
+
+    getAddressAmount nOutputs = (,amountPerOutput * nOutputs) <$> newAddress
 
     newAddress = RPC.getNewAddress Nothing Nothing
 
-    sendTransactions = do
-        lift $ RPC.walletPassphrase password (2 * blockInterval)
-        feeRate <- getMeanFeeRate <$> lift RPC.getBlockCount
-        splitOutputTxs <- spendSplitOutputs feeRate
-        coinbaseSplitTx <- popCoinbase >>= traverse (splitCoinbaseOutput feeRate)
-        lift . mapM_ (`RPC.sendTransaction` Nothing) $ splitOutputTxs
-        lift . mapM_ (`RPC.sendTransaction` Nothing) $ coinbaseSplitTx
+    fundAddress addr = do
+        feeRate <- getMeanFeeRate <$> RPC.getBlockCount
+        spend feeRate [(addr, faucetPayment)]
 
-    popCoinbase = do
-        state <- get
-        case generatorUnspentCoinbases state of
-            next :<| rest -> Just next <$ put state{generatorUnspentCoinbases = rest}
-            _ -> pure Nothing
+satRequirement :: Word64
+satRequirement = sum $ (* amountPerOutput) <$> outputsPerSeries
 
-    appendSpendable tx = modify $ \state ->
-        state
-            { generatorSpendableOutputs =
-                generatorSpendableOutputs state
-                    <> zipWith
-                        (mkSpendableOutput (txHash tx))
-                        [0 ..]
-                        (outValue <$> txOut tx)
+{- | Create many transactions and fill up blockspace.  This uses the same trick
+ as the Bitcoin Core functional tests: create anyone can spend outputs with
+ predictable outputs to avoid needing to sign.
+
+ We create sequences of transactions which start by breaking a UTXO into some number of outputs.
+ Subsequent transactions spend all the outputs of the previous transaction and create the same
+ number of outputs.
+-}
+txFlood ::
+    -- | Fee rate per block
+    (BlockHeight -> Word64) ->
+    StateT [TxSeries] BitcoindClient [TxHash]
+txFlood feeRate = do
+    balance <- lift getBalance
+    nSeries <- getSeriesCount
+    when (balance >= satRequirement && nSeries <= maxSeries) $ do
+        height <- lift RPC.getBlockCount
+        -- Create a series out of every unspent output
+        unspentOutputs <- lift getUnspent
+        -- We use coin control to make sure that the wallet spends outputs
+        -- in a predictable way
+        lift . RPC.lockUnspent False $ fst <$> unspentOutputs
+        mapM_ (createSeries height) unspentOutputs
+    flood
+  where
+    createSeries height (outPoint, amount) = do
+        lift $ RPC.lockUnspent True [outPoint]
+        fund (fromIntegral nOutputs) (feeRate height) amount
+      where
+        nOutputs = amount `quot` amountPerOutput
+
+    getUnspent =
+        fmap extractPointAmount
+            <$> RPC.listUnspent
+                Nothing
+                Nothing
+                Nothing
+                Nothing
+                (ListUnspentOptions Nothing Nothing Nothing Nothing)
+    extractPointAmount =
+        (OutPoint <$> RPC.outputTxId <*> RPC.outputVOut) &&& RPC.outputAmount
+
+getBalance :: BitcoindClient Word64
+getBalance = RPC.balanceDetailsTrusted . RPC.balancesMine <$> RPC.getBalances
+
+getSeriesCount :: Monad m => StateT [TxSeries] m Int
+getSeriesCount = gets length
+
+type TxSeries = [Tx]
+
+-- | Create the funding anchor for a tx series and add the tx series to the internal state
+fund ::
+    -- | Output count per transaction
+    Int ->
+    -- | Fee rate
+    Word64 ->
+    -- | Sats to allocate
+    Word64 ->
+    StateT [TxSeries] BitcoindClient TxHash
+fund nOutputs feeRate sats = do
+    (value, outPoint) <- lift createFundingOutput
+    modify' $ (:) (take seriesLength $ txSeries nOutputs feePerOutput value outPoint)
+    pure $ H.outPointHash outPoint
+  where
+    createFundingOutput = do
+        tx <- createRoot >>= (`RPC.getRawTransaction` Nothing)
+        pure
+            ( H.outValue . head $ H.txOut tx
+            , OutPoint (H.txHash tx) 0
+            )
+
+    createRoot =
+        RPC.sendToAddress
+            easySpendAddress
+            sats
+            Nothing
+            Nothing
+            (Just True)
+            Nothing
+            Nothing
+            Nothing
+            Nothing
+            (Just feeRate)
+
+    feePerOutput = feeRate * 75 -- tuned via testing
+
+-- | Peel off the next transaction from each series and broadcast it
+flood :: StateT [TxSeries] BitcoindClient [TxHash]
+flood = StateT (pure . advance) >>= lift . traverse (`RPC.sendTransaction` Nothing)
+
+advance :: [TxSeries] -> ([Tx], [TxSeries])
+advance = peelFirst &&& dropFirst
+  where
+    peelFirst = mapMaybe (fmap fst . uncons)
+    dropFirst = filter (not . null) . fmap (drop 1)
+
+{- | Construct a sequence of transactions each of which spends all of the inputs of the previous
+ one, creating the same number of outputs
+-}
+txSeries ::
+    -- | Number of outputs
+    Int ->
+    -- | Fee per output
+    Word64 ->
+    -- | Funds for the series
+    Word64 ->
+    OutPoint ->
+    TxSeries
+txSeries nOutputs feePerOutput totalSats fundingPoint =
+    unfoldr (sequence . (id &&& getNext)) tx0
+  where
+    tx0 =
+        Tx
+            { H.txVersion = 2
+            , H.txIn = [spendEasy fundingPoint]
+            , H.txOut = replicate nOutputs $ easySpendOutput satsPerOutput0
+            , H.txWitness = mempty
+            , H.txLockTime = 0
             }
-    mkSpendableOutput txId ix amount = (OutPoint txId ix, amount)
+    satsPerOutput0 = (totalSats `quot` fromIntegral nOutputs) - feePerOutput
 
-    splitCoinbaseOutput feeRate (coinbaseOutput, amount) = do
-        recipients <- lift $ replicateM splitCount newAddress
-        let outputs = zip recipients amounts
-        tx <- lift $ spendOutput feeRate coinbaseOutput outputs
-        appendSpendable tx
-        pure tx
+    getNext prevTx
+        | satsPerOutput > 2 * feePerOutput =
+            Just
+                Tx
+                    { H.txVersion = 2
+                    , H.txIn = spendEasy <$> outPoints prevTx
+                    , H.txOut = replicate nOutputs $ easySpendOutput satsPerOutput
+                    , H.txWitness = mempty
+                    , H.txLockTime = 0
+                    }
+        | otherwise = Nothing
       where
-        (q, r) = amount `quotRem` splitCount
-        amounts = (q +) <$> (replicate (fromIntegral r) 1 <> repeat 0)
-        splitCount :: Num a => a
-        splitCount = 20
+        satsPerOutput = (H.outValue . head . H.txOut) prevTx - feePerOutput
 
-    useSpendable = do
-        spendableOutputs <- gets generatorSpendableOutputs
-        modify $ \state -> state{generatorSpendableOutputs = mempty}
-        pure spendableOutputs
+    outPoints tx = OutPoint (H.txHash tx) <$> [0 .. (fromIntegral . length . H.txOut) tx - 1]
 
-    spendSplitOutputs feeRate = useSpendable >>= lift . traverse (spendSplitOutput feeRate)
-    spendSplitOutput feeRate (outPoint, amount) = do
-        recipient <- liftIO getExternalAddress >>= maybe newAddress pure
-        spendOutput feeRate outPoint [(recipient, amount)]
+spend ::
+    Word64 ->
+    [(Text, Word64)] ->
+    BitcoindClient TxHash
+spend feeRate addrAmounts =
+    RPC.sendMany
+        (Map.fromList addrAmounts)
+        Nothing
+        mempty
+        Nothing
+        Nothing
+        Nothing
+        (Just feeRate)
 
-    password = "password"
+easySpendAddress :: Text
+Just easySpendAddress =
+    H.addrToText H.btcRegTest =<< (H.outputAddress . H.toP2SH) (Script mempty)
 
-    spendOutput feeRate inputOutPoint outputs = do
-        psbt0 <-
-            RPC.createPsbtPsbt
-                <$> RPC.createFundedPsbt [psbtInput] psbtOutputs Nothing (Just options) Nothing
-        psbt1 <-
-            RPC.processPsbtPsbt
-                <$> RPC.processPsbt (psbtText psbt0) (Just True) Nothing Nothing
-        finalizePsbtResponse <- RPC.finalizePsbt (psbtText psbt1) (Just True)
-        pure . fromJust $ RPC.finalizedTx finalizePsbtResponse
-      where
-        psbtInput =
-            RPC.PsbtInput
-                { RPC.psbtInputTx = outPointHash inputOutPoint
-                , RPC.psbtInputVOut = outPointIndex inputOutPoint
-                , RPC.psbtInputSequence = Nothing
-                }
-        psbtOutputs =
-            RPC.PsbtOutputs
-                { RPC.psbtOutputAddrs = outputs
-                , RPC.psbtOutputData = Nothing
-                }
-        options =
-            RPC.CreatePsbtOptions
-                { RPC.createPsbtAddInputs = Just False
-                , RPC.createPsbtChangeAddress = Nothing
-                , RPC.createPsbtChangePosition = Nothing
-                , RPC.createPsbtChangeType = Nothing
-                , RPC.createPsbtIncludeWatching = Nothing
-                , RPC.createPsbtLockUnspents = Nothing
-                , RPC.createPsbtFeeRate = Just feeRate
-                , RPC.createPsbtSubtractFee = [0 .. length outputs - 1]
-                , RPC.createPsbtReplaceable = Nothing
-                , RPC.createPsbtConfTarget = Nothing
-                , RPC.createPsbtEstimateMode = Nothing
-                }
+easySpendScriptOutput :: ByteString
+easySpendScriptOutput = H.encodeOutputBS . H.toP2SH $ Script mempty
 
-    psbtText = encodeBase64 . S.encode
+-- | Produce an output that we can spend without signing
+easySpendOutput :: Word64 -> TxOut
+easySpendOutput outValue = TxOut{H.outValue, H.scriptOutput = easySpendScriptOutput}
+
+-- | Produce an input that spends an output created with 'easySpendOutput'
+spendEasy :: OutPoint -> TxIn
+spendEasy prevOutput =
+    TxIn
+        { H.prevOutput
+        , H.scriptInput = S.encode $ Script [H.OP_1, H.opPushData (S.encode $ Script mempty)]
+        , H.txInSequence = maxBound
+        }
+
+waitRepeat :: MonadIO m => Int -> m a -> m ()
+waitRepeat delayInSecs task =
+    forever $ task >> (liftIO . threadDelay) (delayInSecs * 1_000_000)
