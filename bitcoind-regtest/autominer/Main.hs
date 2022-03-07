@@ -93,7 +93,9 @@ waitSync = do
     getPeerInfo >>= maybe retry onPeerInfo . listToMaybe
   where
     onPeerInfo peerInfo
-        | syncedBlocks peerInfo < startingHeight peerInfo = retry
+        | Just synced <- syncedBlocks peerInfo
+        , synced < startingHeight peerInfo =
+            retry
         | otherwise = pure ()
     retry = do
         liftIO $ putStrLn "Waiting for sync"
