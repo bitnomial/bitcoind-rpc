@@ -15,6 +15,7 @@ module Bitcoin.Core.Regtest (
     spendPackageOutputs,
 
     -- * Simulation
+    Funding (..),
     generateWithTransactions,
 
     -- * Internal wallet

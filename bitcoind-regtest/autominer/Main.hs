@@ -12,11 +12,13 @@ import Bitcoin.Core.RPC (
     syncedBlocks,
  )
 import Bitcoin.Core.Regtest (
+    Funding (OneTime),
     generateWithTransactions,
     nodeP2pPort,
     runBitcoind,
     withBitcoind,
  )
+import Control.Applicative (many)
 import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
 import Control.Monad (forM_, (<=<))
@@ -33,6 +35,7 @@ data Config = Config
     { basePort :: Int
     , blockInterval :: Int
     , peerPort :: Maybe Int
+    , initialFunding :: Funding
     }
 
 options :: ParserInfo Config
@@ -45,23 +48,39 @@ options = Opt.info (opts <**> Opt.helper) desc
             <$> optBasePort
             <*> optBlockInterval
             <*> optional optPeerPort
+            <*> (OneTime <$> many optFunding)
 
     optBasePort =
         Opt.option Opt.auto $
             Opt.long "basePort"
                 <> Opt.value 18044
-                <> Opt.help "default: start at port 18044"
+                <> Opt.help "The first in the sequence of ports the miner will use"
+                <> Opt.showDefault
 
     optBlockInterval =
         Opt.option Opt.auto $
             Opt.long "blockInterval"
                 <> Opt.value 60
-                <> Opt.help "default: 60 seconds"
+                <> Opt.showDefault
 
     optPeerPort =
         Opt.option Opt.auto $
             Opt.long "peerPort"
-                <> Opt.help "Connect to a peer at this address"
+                <> Opt.help "Connect to a peer at this port"
+
+    optFunding = (,) <$> optFundingAddress <*> optFundingAmount
+
+    optFundingAddress =
+        Opt.strOption $
+            Opt.long "fundingAddress"
+                <> Opt.help "Use this address to collect funds"
+
+    optFundingAmount =
+        Opt.option Opt.auto $
+            Opt.long "fundingAmount"
+                <> Opt.help "The amount of satoshis with which to fund"
+                <> Opt.value 100_000_000
+                <> Opt.showDefault
 
 main :: IO ()
 main = do
@@ -80,7 +99,7 @@ main = do
             mgr
             nodeHandle
             (blockInterval config)
-            (pure Nothing)
+            (Just $ initialFunding config)
             oscillatingFeeRate
 
 oscillatingFeeRate :: BlockHeight -> Word64

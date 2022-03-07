@@ -4,6 +4,7 @@
 {-# LANGUAGE TupleSections #-}
 
 module Bitcoin.Core.Regtest.Generator (
+    Funding (..),
     generateWithTransactions,
 ) where
 
@@ -17,7 +18,8 @@ import Control.Arrow ((&&&))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, link)
 import Control.Exception (throwIO)
-import Control.Monad (forever, replicateM, when, (>=>))
+import Control.Monad (forever, replicateM_, when, (>=>))
+import Control.Monad.Fix (fix)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict (
@@ -78,24 +80,35 @@ outputsPerSeries =
         , replicate 100 2 -- 100 txs with 2 outputs
         ]
 
+-- | Funding configuration
+data Funding
+    = -- | Send 1BTC each time the action produces an address
+      Faucet (IO (Maybe Text))
+    | -- | Send a certain amount of bitcoin once
+      OneTime [(Text, Word64)]
+
 -- | Generate many transactions per block with a certain mean fee rate
 generateWithTransactions ::
     Manager ->
     NodeHandle ->
     -- | Block interval (seconds per block)
     Int ->
-    -- | Get an external address.  This action /must not/ block.
-    IO (Maybe Text) ->
+    -- | Optional funding behavior
+    Maybe Funding ->
     -- | Mean fee rate at height
     (BlockHeight -> Word64) ->
     IO ()
-generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMeanFeeRate = do
+generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = do
     run initialize
 
-    (async >=> link) . run . RPC.withWallet miningWallet . waitRepeat 1 $ do
-        balance <- getBalance
-        when (balance >= faucetPayment) $
-            liftIO getExternalAddress >>= mapM_ fundAddress
+    (async >=> link) . run . RPC.withWallet miningWallet $ case funding of
+        Just (Faucet getExternalAddress) ->
+            waitRepeat 1 $ do
+                balance <- getBalance
+                when (balance >= faucetPayment) $
+                    liftIO getExternalAddress >>= mapM_ (fundAddress faucetPayment)
+        Just (OneTime payouts) -> mapM_ (uncurry handlePayout) payouts
+        _ -> pure ()
 
     run . flip evalStateT mempty . waitRepeat blockInterval $ do
         mapStateT (RPC.withWallet floodingWallet) $ txFlood getMeanFeeRate
@@ -120,7 +133,7 @@ generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMean
     initialize = do
         newWallet miningWallet
         newWallet floodingWallet
-        replicateM 100 $ generatorGenerate 0
+        replicateM_ 100 $ generatorGenerate 0
 
     generatorGenerate nSeries = do
         addr <- RPC.withWallet miningWallet newAddress
@@ -139,9 +152,15 @@ generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMean
 
     newAddress = RPC.getNewAddress Nothing Nothing
 
-    fundAddress addr = do
+    fundAddress amount addr = do
         feeRate <- getMeanFeeRate <$> RPC.getBlockCount
-        spend feeRate [(addr, faucetPayment)]
+        spend feeRate [(addr, amount)]
+
+    handlePayout fundingAddress fundingAmount = fix $ \retry -> do
+        balance <- getBalance
+        if balance >= fundingAmount
+            then void $ fundAddress fundingAmount fundingAddress
+            else liftIO (threadDelay 1_000_000) >> retry
 
 satRequirement :: Word64
 satRequirement = sum $ (* amountPerOutput) <$> outputsPerSeries
