@@ -29,6 +29,7 @@ import Data.Aeson (
     withObject,
     withText,
     (.:),
+    (.:?),
  )
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
@@ -133,8 +134,8 @@ data PeerInfo = PeerInfo
     , version :: Word64
     , inbound :: Bool
     , startingHeight :: BlockHeight
-    , syncedHeaders :: Word32
-    , syncedBlocks :: Word32
+    , syncedHeaders :: Maybe Word32
+    , syncedBlocks :: Maybe Word32
     , inflight :: [BlockHeight]
     , minFeeFilter :: Word64
     -- ^ in satoshis
@@ -155,14 +156,18 @@ instance FromJSON PeerInfo where
             <*> o .: "bytesrecv"
             <*> (utcTime <$> o .: "conntime")
             <*> (fromIntegral @Int <$> o .: "timeoffset")
-            <*> o .: "pingtime"
+            <*> o .:? "pingtime"
             <*> o .: "version"
             <*> o .: "inbound"
             <*> o .: "startingheight"
-            <*> o .: "synced_headers"
-            <*> o .: "synced_blocks"
+            <*> (syncedValue <$> o .: "synced_headers")
+            <*> (syncedValue <$> o .: "synced_blocks")
             <*> o .: "inflight"
             <*> (toSatoshis <$> o .: "minfeefilter")
+      where
+        syncedValue x
+            | x < 0 = Nothing
+            | otherwise = Just $ fromIntegral @Int x
 
 type NetworkRpc =
     BitcoindEndpoint "addnode" (I Text -> I Command -> CX)

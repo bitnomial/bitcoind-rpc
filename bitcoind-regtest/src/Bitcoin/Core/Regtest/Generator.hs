@@ -1,9 +1,12 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 
 module Bitcoin.Core.Regtest.Generator (
+    Funding (..),
     generateWithTransactions,
 ) where
 
@@ -17,7 +20,8 @@ import Control.Arrow ((&&&))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (async, link)
 import Control.Exception (throwIO)
-import Control.Monad (forever, replicateM, when, (>=>))
+import Control.Monad (foldM, forever, replicateM_, unless, when, (>=>))
+import Control.Monad.Fix (fix)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict (
@@ -28,11 +32,14 @@ import Control.Monad.Trans.State.Strict (
     modify',
  )
 import Data.ByteString (ByteString)
+import Data.Foldable (foldl')
 import Data.Functor (void)
 import Data.List (uncons, unfoldr)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import qualified Data.Serialize as S
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Word (Word64)
 import Haskoin (
@@ -78,28 +85,40 @@ outputsPerSeries =
         , replicate 100 2 -- 100 txs with 2 outputs
         ]
 
+-- | Funding configuration
+data Funding
+    = -- | Send 1BTC each time the action produces an address
+      Faucet (IO (Maybe Text))
+    | -- | Send a certain amount of bitcoin once
+      OneTime [(Text, Word64)]
+
 -- | Generate many transactions per block with a certain mean fee rate
 generateWithTransactions ::
     Manager ->
     NodeHandle ->
     -- | Block interval (seconds per block)
     Int ->
-    -- | Get an external address.  This action /must not/ block.
-    IO (Maybe Text) ->
+    -- | Optional funding behavior
+    Maybe Funding ->
     -- | Mean fee rate at height
     (BlockHeight -> Word64) ->
     IO ()
-generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMeanFeeRate = do
+generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = do
     run initialize
 
-    (async >=> link) . run . RPC.withWallet miningWallet . waitRepeat 1 $ do
-        balance <- getBalance
-        when (balance >= faucetPayment) $
-            liftIO getExternalAddress >>= mapM_ fundAddress
+    (async >=> link) . run . RPC.withWallet miningWallet $ case funding of
+        Just (Faucet getExternalAddress) ->
+            waitRepeat 1 $ do
+                balance <- getBalance
+                when (balance >= faucetPayment) $
+                    liftIO getExternalAddress >>= mapM_ (fundAddress faucetPayment)
+        Just (OneTime payouts) -> mapM_ (uncurry handlePayout) payouts
+        _ -> pure ()
 
     run . flip evalStateT mempty . waitRepeat blockInterval $ do
         mapStateT (RPC.withWallet floodingWallet) $ txFlood getMeanFeeRate
-        lift . generatorGenerate =<< getSeriesCount
+        blockHash <- lift . generatorGenerate =<< getSeriesCount
+        liftIO . putStrLn $ "New block: " <> show blockHash
   where
     run = runBitcoind mgr nodeHandle >=> either throwIO pure
 
@@ -120,13 +139,19 @@ generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMean
     initialize = do
         newWallet miningWallet
         newWallet floodingWallet
-        replicateM 100 $ generatorGenerate 0
+
+        RPC.withWallet miningWallet . sweep . (* 15) . getMeanFeeRate =<< RPC.getBlockCount
+        replicateM_ 5 $ generatorGenerate 0
+
+        balance <- RPC.withWallet miningWallet getBalance
+        unless (balance > 0) . replicateM_ 100 $ generatorGenerate 0
 
     generatorGenerate nSeries = do
         addr <- RPC.withWallet miningWallet newAddress
-        RPC.generateToAddress 1 addr Nothing
+        blockHash <- RPC.generateToAddress 1 addr Nothing
         balance <- RPC.withWallet miningWallet getBalance
         when (balance >= satRequirement && nSeries <= maxSeries) fundFloodWallet
+        pure blockHash
 
     fundFloodWallet = do
         addressAmounts <-
@@ -139,9 +164,15 @@ generateWithTransactions mgr nodeHandle blockInterval getExternalAddress getMean
 
     newAddress = RPC.getNewAddress Nothing Nothing
 
-    fundAddress addr = do
+    fundAddress amount addr = do
         feeRate <- getMeanFeeRate <$> RPC.getBlockCount
-        spend feeRate [(addr, faucetPayment)]
+        spend feeRate [(addr, amount)]
+
+    handlePayout fundingAddress fundingAmount = fix $ \retry -> do
+        balance <- getBalance
+        if balance >= fundingAmount
+            then void $ fundAddress fundingAmount fundingAddress
+            else liftIO (threadDelay 1_000_000) >> retry
 
 satRequirement :: Word64
 satRequirement = sum $ (* amountPerOutput) <$> outputsPerSeries
@@ -296,6 +327,83 @@ spend feeRate addrAmounts =
         Nothing
         Nothing
         (Just feeRate)
+
+data BlockDelta = BlockDelta
+    { blockSpends :: Set OutPoint
+    , blockCreates :: Set (OutPoint, Word64)
+    }
+
+{- | Identify the outputs flooded by a previous run that are unspent and sweep
+some of them into the mining wallet.  This makes it possible to avoid starting
+out by mining 100 blocks.
+-}
+sweep ::
+    -- | Fee per input
+    Word64 ->
+    BitcoindClient Int
+sweep feePerInput = do
+    currentHeight <- RPC.getBlockCount
+    sweepableOutputs <- foldM onBlockHeight mempty [0 .. currentHeight]
+    mapM_ onOutputCluster
+        . take 500
+        . groupsOf 100
+        . Set.toList
+        $ sweepableOutputs
+    pure $ Set.size sweepableOutputs
+  where
+    onBlockHeight !utxos n = updateUtxoSet utxos <$> getSpentUnspent n
+    getSpentUnspent = RPC.getBlockHash >=> fmap onBlock . RPC.getBlock
+    onBlock = finalizeBlockDelta . foldl' onTransaction (BlockDelta mempty mempty) . H.blockTxns
+    onTransaction delta tx =
+        BlockDelta
+            { blockSpends = blockSpends delta <> Set.fromList (H.prevOutput <$> H.txIn tx)
+            , blockCreates =
+                blockCreates delta
+                    <> ( Set.fromList
+                            . fmap (outPointValue (H.txHash tx))
+                            . filter (isEasySpend . snd)
+                            . zip [0 ..]
+                            . H.txOut
+                       )
+                        tx
+            }
+    outPointValue txHash (ix, txOut) = (OutPoint txHash ix, H.outValue txOut)
+    isEasySpend txOut = H.scriptOutput txOut == easySpendScriptOutput
+    finalizeBlockDelta delta =
+        BlockDelta
+            { blockSpends = blockSpends delta
+            , blockCreates = Set.filter (isUnspent delta) $ blockCreates delta
+            }
+
+    updateUtxoSet utxos delta = Set.filter (isUnspent delta) utxos <> blockCreates delta
+    isUnspent delta (outPoint, _) = not . Set.member outPoint $ blockSpends delta
+
+    onOutputCluster outputs = do
+        scriptOutput <-
+            RPC.getNewAddress Nothing Nothing
+                >>= maybe
+                    (error "Unable to decode address")
+                    (pure . H.addressToScriptBS)
+                    . H.textToAddr H.btcRegTest
+        RPC.sendTransaction
+            ( Tx
+                { txVersion = 2
+                , txIn = spendEasy . fst <$> outputs
+                , txOut =
+                    [ H.TxOut
+                        { H.outValue = sum (subtract feePerInput . snd <$> outputs)
+                        , H.scriptOutput
+                        }
+                    ]
+                , txWitness = mempty
+                , txLockTime = 0
+                }
+            )
+            Nothing
+
+    groupsOf n = \case
+        [] -> []
+        xs -> uncurry (:) $ groupsOf n <$> splitAt n xs
 
 easySpendAddress :: Text
 Just easySpendAddress =
