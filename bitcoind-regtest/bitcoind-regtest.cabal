@@ -16,7 +16,7 @@ common core
     ghc-options:      -Wall -fno-warn-unused-do-bind
     build-depends:
           async >=2.0 && <2.3
-        , base >=4.12 && <4.16
+        , base >=4.12 && <4.17
         , base64 ^>=0.4
         , bitcoind-rpc ^>=0.3
         , bytestring >=0.10 && <0.12
@@ -28,7 +28,7 @@ common core
         , servant >=0.15 && <0.20
         , servant-client >=0.15 && <0.20
         , temporary ^>=1.3
-        , text ^>=1.2
+        , text >=1.2 && <2.1
 
 library
     import:         core
@@ -53,7 +53,7 @@ executable bitcoind-rpc-explorer
     build-depends:
           bitcoind-regtest
         , bytestring >=0.10 && <0.12
-        , optparse-applicative >=0.14 && <0.17
+        , optparse-applicative >=0.14 && <0.20
 
 
 executable bitcoind-regtest-autominer
@@ -62,7 +62,7 @@ executable bitcoind-regtest-autominer
     hs-source-dirs: autominer/
     build-depends:
           bitcoind-regtest
-        , optparse-applicative >=0.14 && <0.17
+        , optparse-applicative >=0.14 && <0.20
 
 test-suite bitcoind-rpc-tests
     import:         core
