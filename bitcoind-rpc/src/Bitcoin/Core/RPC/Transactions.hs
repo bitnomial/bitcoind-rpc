@@ -32,6 +32,7 @@ module Bitcoin.Core.RPC.Transactions (
 
 import Data.Aeson (
     FromJSON (..),
+    Key,
     ToJSON (toJSON),
     object,
     withObject,
@@ -247,7 +248,7 @@ instance ToJSON PsbtInput where
 
 -- | @since 0.3.0.0
 data PsbtOutputs = PsbtOutputs
-    { psbtOutputAddrs :: [(Text, Word64)]
+    { psbtOutputAddrs :: [(Key, Word64)]
     , psbtOutputData :: Maybe Text
     }
     deriving (Eq, Show)

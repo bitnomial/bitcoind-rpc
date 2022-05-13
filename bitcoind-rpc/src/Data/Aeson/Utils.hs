@@ -22,6 +22,7 @@ module Data.Aeson.Utils (
 import Control.Monad ((<=<), (>=>))
 import Data.Aeson (
     FromJSON (..),
+    Key,
     ToJSON (..),
     Value,
     object,
@@ -46,7 +47,7 @@ import Haskoin.Util (decodeHex, encodeHex)
 partialObject :: [Maybe Pair] -> Value
 partialObject = object . catMaybes
 
-(.=?) :: ToJSON a => Text -> Maybe a -> Maybe (Text, Value)
+(.=?) :: ToJSON a => Key -> Maybe a -> Maybe Pair
 k .=? mv = (k .=) <$> mv
 
 -- | Helper function for decoding POSIX timestamps
