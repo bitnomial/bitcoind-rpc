@@ -40,16 +40,7 @@ import Data.Aeson (
     (.:?),
     (.=),
  )
-import Data.Proxy (Proxy (..))
-import Data.Scientific (Scientific)
-import qualified Data.Serialize as S
-import Data.Text (Text)
-import Data.Word (Word32, Word64)
-import Haskoin.Block (BlockHash, BlockHeight)
-import Haskoin.Transaction (PartiallySignedTransaction, Tx, TxHash)
-import Haskoin.Util (encodeHex)
-import Servant.API ((:<|>) (..))
-
+import qualified Data.Aeson.Key as K
 import Data.Aeson.Utils (
     Base64Encoded,
     HexEncoded (HexEncoded, unHexEncoded),
@@ -62,7 +53,16 @@ import Data.Aeson.Utils (
     (.=?),
  )
 import Data.Maybe (fromMaybe)
+import Data.Proxy (Proxy (..))
+import Data.Scientific (Scientific)
+import qualified Data.Serialize as S
+import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Word (Word32, Word64)
+import Haskoin.Block (BlockHash, BlockHeight)
+import Haskoin.Transaction (PartiallySignedTransaction, Tx, TxHash)
+import Haskoin.Util (encodeHex)
+import Servant.API ((:<|>) (..))
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
@@ -258,7 +258,7 @@ instance ToJSON PsbtOutputs where
             (fmap toAddrObject . psbtOutputAddrs) outputs
                 <> (foldMap toDataObject . psbtOutputData) outputs
       where
-        toAddrObject (addr, amount) = object [addr .= satsToBTCText amount]
+        toAddrObject (addr, amount) = object [K.fromText addr .= satsToBTCText amount]
         toDataObject hex = [object ["data" .= hex]]
 
 {- | Creates a transaction in the Partially Signed Transaction format. Implements the Creator role.
