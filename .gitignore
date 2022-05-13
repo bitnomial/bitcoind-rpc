@@ -3,3 +3,4 @@ dist-newstyle/
 /result
 *.out
 /cabal.project.local
+TAGS
