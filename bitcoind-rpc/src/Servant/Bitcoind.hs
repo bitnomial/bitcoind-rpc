@@ -51,6 +51,7 @@ import Data.Aeson (
  )
 import qualified Data.Aeson.Types as Ae
 import Data.Bifunctor (first)
+import Data.Kind (Type)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.TypeLits (KnownSymbol, Symbol)
@@ -123,7 +124,7 @@ data DefZero
 instance Num a => HasDefault DefZero a where getDefault _ = 0
 
 class HasBitcoindClient x where
-    type TheBitcoindClient x :: *
+    type TheBitcoindClient x :: Type
     toBitcoindClient :: p x -> TheBitcoindClient x
 
 instance
@@ -198,8 +199,8 @@ type NakedClient =
  functions with endpoint specific arguments.
 -}
 class Rewrite a where
-    type RewriteFrom a :: *
-    type RewriteTo a :: *
+    type RewriteFrom a :: Type
+    type RewriteTo a :: Type
     rewriteRpc :: p a -> RewriteFrom a -> RewriteTo a
 
 -- | Handle endpoints which do not have an expected return value
