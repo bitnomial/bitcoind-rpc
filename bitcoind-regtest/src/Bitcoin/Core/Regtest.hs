@@ -36,6 +36,7 @@ module Bitcoin.Core.Regtest (
     v21_0,
     v21_1,
     v22_0,
+    v23_0,
 ) where
 
 import Bitcoin.Core.Regtest.Framework

@@ -38,6 +38,7 @@ module Bitcoin.Core.Regtest.Framework (
     v21_0,
     v21_1,
     v22_0,
+    v23_0,
 ) where
 
 import Control.Concurrent (threadDelay)
@@ -334,10 +335,11 @@ textAddrs = addrToText' <$> addrs
 textAddr0, textAddr1, textAddr2 :: Text
 textAddr0 : textAddr1 : textAddr2 : _ = textAddrs
 
-v19_1, v20_0, v20_1, v21_0, v21_1, v22_0 :: Version
+v19_1, v20_0, v20_1, v21_0, v21_1, v22_0, v23_0 :: Version
 v19_1 = (0, 19, 1)
 v20_0 = (0, 20, 0)
 v20_1 = (0, 20, 1)
 v21_0 = (0, 21, 0)
 v21_1 = (0, 21, 1)
 v22_0 = (22, 0, 0)
+v23_0 = (23, 0, 0)
