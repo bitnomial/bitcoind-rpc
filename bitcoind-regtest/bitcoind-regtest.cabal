@@ -60,6 +60,7 @@ executable bitcoind-regtest-autominer
     import: core
     main-is: Main.hs
     hs-source-dirs: autominer/
+    ghc-options: -threaded -O2
     build-depends:
           bitcoind-regtest
         , optparse-applicative >=0.14 && <0.20
