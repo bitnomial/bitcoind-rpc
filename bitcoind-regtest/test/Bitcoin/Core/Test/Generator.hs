@@ -22,7 +22,7 @@ import Test.Tasty.HUnit (testCaseSteps, (@?=))
 
 testGenerator :: Manager -> TestTree
 testGenerator mgr = testCaseSteps "generateWithTransactions" $ \step ->
-    withBitcoind 8459 $ \nodeHandle -> do
+    withBitcoind 8459 Nothing $ \nodeHandle -> do
         step "Generate some blocks"
         h <- async $ generateWithTransactions mgr nodeHandle 1 Nothing (const 20)
         link h

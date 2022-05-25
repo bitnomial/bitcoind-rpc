@@ -2,7 +2,6 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TupleSections #-}
 
 module Bitcoin.Core.Regtest.Framework (
     -- * Run an ephemeral regtest node
@@ -12,7 +11,6 @@ module Bitcoin.Core.Regtest.Framework (
     runBitcoind,
     withBitcoind,
     peerWith,
-    withBitcoindCluster,
 
     -- * Funding
     oneBitcoin,
@@ -43,13 +41,9 @@ module Bitcoin.Core.Regtest.Framework (
 
 import Control.Concurrent (threadDelay)
 import Control.Exception (Exception, bracket, throwIO)
-import Control.Monad (void, zipWithM)
-import Control.Monad.Trans.Cont (ContT (..))
+import Control.Monad (void)
 import Data.Attoparsec.Text (char, decimal, parseOnly, sepBy, string)
-import Data.Map.Strict (Map)
 import qualified Data.Serialize as S
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word64)
@@ -82,7 +76,7 @@ import Haskoin.Transaction (
     txHash,
  )
 import Haskoin.Util (encodeHex, maybeToEither)
-import Network.HTTP.Client (Manager, defaultManagerSettings, newManager)
+import Network.HTTP.Client (Manager)
 import Servant.API (BasicAuthData)
 import System.Directory (createDirectoryIfMissing)
 import System.IO (Handle, IOMode (..), openFile)
@@ -102,13 +96,9 @@ import Bitcoin.Core.RPC (
     BitcoindClient,
     BitcoindException,
     Command (Add),
-    addNode,
     basicAuthFromCookie,
  )
 import qualified Bitcoin.Core.RPC as RPC
-import Control.Monad.IO.Class (liftIO)
-import Data.Functor ((<&>))
-import qualified Data.Map.Strict as Map
 
 type Version = (Int, Int, Int)
 
@@ -125,46 +115,37 @@ data NodeHandle = NodeHandle
 portsInUse :: NodeHandle -> [Int]
 portsInUse NodeHandle{nodeRpcPort} = [nodeRpcPort - 1, nodeRpcPort]
 
--- | Run an RPC computation with an ephemeral node
+-- | Run an RPC computation with a node launched in this testing framework
 runBitcoind :: Manager -> NodeHandle -> BitcoindClient r -> IO (Either BitcoindException r)
 runBitcoind mgr NodeHandle{nodeRpcPort, nodeAuth} = RPC.runBitcoind mgr "127.0.0.1" nodeRpcPort nodeAuth
 
--- | Provide bracketed access to a fresh ephemeral node
+-- | Provide bracketed access to a fresh node
 withBitcoind ::
     -- | Unused port
     Int ->
+    -- | Optional data directory
+    Maybe FilePath ->
     (NodeHandle -> IO r) ->
     IO r
-withBitcoind basePort k = do
+withBitcoind basePort dataDir k = do
     v <- bitcoindVersion
-    tmp <- getCanonicalTemporaryDirectory
-    withSystemTempDirectory "bitcoind-rpc-tests" $ \dd -> do
+    withDataDir $ \dd -> do
         createDirectoryIfMissing True $ dd <> "/regtest/wallets"
+        tmp <- getCanonicalTemporaryDirectory
         bracket (initBitcoind tmp dd basePort) stopBitcoind . const $ do
             auth <- basicAuthFromCookie $ dd <> "/regtest/.cookie"
-            k $ NodeHandle basePort (getRpcPort basePort) auth (rawTxSocket dd) (rawBlockSocket dd) v
-
--- | Provide bracketed access to a connected collection of nodes
-withBitcoindCluster ::
-    Ord a =>
-    -- | Starting port
-    Int ->
-    -- | Set of node labels
-    Set a ->
-    (Map a NodeHandle -> IO r) ->
-    IO r
-withBitcoindCluster port0 labels = runContT $ do
-    mgr <- liftIO $ newManager defaultManagerSettings
-    instanceMap <- mkInstances
-    mapM_ (addNodes mgr) instanceMap
-    pure instanceMap
+            k $
+                NodeHandle
+                    basePort
+                    (getRpcPort basePort)
+                    auth
+                    (rawTxSocket dd)
+                    (rawBlockSocket dd)
+                    v
   where
-    mkInstances = Map.fromList <$> zipWithM mkInstance ports (Set.toList labels)
-    mkInstance port label = fmap (label,) . ContT $ withBitcoind port
-    addNodes mgr h = liftIO $ runBitcoind mgr h $ mapM_ (`addNode` Add) nodeAddrs
-
-    ports = (+ port0) <$> [0, 2 ..]
-    nodeAddrs = take (Set.size labels) $ ports <&> \p -> Text.pack ("127.0.0.1:" <> show p)
+    withDataDir onDataDir
+        | Just dd <- dataDir = onDataDir dd
+        | otherwise = withSystemTempDirectory "bitcoind-rpc-tests" onDataDir
 
 peerWith :: Manager -> NodeHandle -> NodeHandle -> IO ()
 peerWith mgr nodeA nodeB =

@@ -43,7 +43,7 @@ main = do
     outputFile <- execParser opts
     mapM_ (`writeFile` mempty) outputFile
     let writeOutput = maybe putStrLn appendFile outputFile
-    withBitcoind 8330 $ \h -> do
+    withBitcoind 8330 Nothing $ \h -> do
         rpcCommands <- parseHelpText <$> bitcoinCli h ["help"]
         writeOutput $ unlines rpcCommands
         mapM_ (getHelpText h >=> writeOutput) rpcCommands
