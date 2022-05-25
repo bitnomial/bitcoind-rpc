@@ -38,10 +38,10 @@ module Servant.Bitcoind (
 
 import Control.Exception (Exception)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.State.Strict (StateT, get)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT (..))
 import Control.Monad.Trans.Reader (ReaderT (..))
+import Control.Monad.Trans.State.Strict (StateT, get)
 import Data.Aeson (
     FromJSON (..),
     ToJSON (..),

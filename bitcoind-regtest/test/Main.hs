@@ -13,7 +13,7 @@ import Bitcoin.Core.Test.PSBT (psbtRPC)
 import Bitcoin.Core.Test.Wallet (walletRPC)
 
 main :: IO ()
-main = withBitcoind 8449 $ \nodeHandle -> do
+main = withBitcoind 8449 Nothing $ \nodeHandle -> do
     threadDelay 1_000_000
     mgr <- newManager defaultManagerSettings
     defaultMain $

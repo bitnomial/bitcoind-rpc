@@ -86,7 +86,7 @@ main :: IO ()
 main = do
     mgr <- newManager defaultManagerSettings
     config <- Opt.execParser options
-    withBitcoind (basePort config) $ \nodeHandle -> do
+    withBitcoind (basePort config) Nothing $ \nodeHandle -> do
         putStrLn $ "Listening for peers on 127.0.0.1:" <> show (nodeP2pPort nodeHandle)
         forM_ (show <$> peerPort config) $ \thePeerPort -> do
             putStrLn $ "Connecting to a peer on port " <> thePeerPort

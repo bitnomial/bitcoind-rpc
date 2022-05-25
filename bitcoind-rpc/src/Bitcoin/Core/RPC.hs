@@ -163,8 +163,8 @@ import Bitcoin.Core.RPC.Network
 import Bitcoin.Core.RPC.Responses
 import Bitcoin.Core.RPC.Transactions
 import Bitcoin.Core.RPC.Wallet
-import Control.Monad.State.Strict (evalStateT, get, put, runStateT)
 import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.State.Strict (evalStateT, get, put, runStateT)
 import Data.Aeson (Value)
 import qualified Data.Aeson as Ae
 import Network.HTTP.Types (statusCode)

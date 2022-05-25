@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -12,7 +11,6 @@ module Bitcoin.Core.Regtest.Generator (
 
 import Bitcoin.Core.RPC (
     BitcoindClient,
-    ListUnspentOptions (ListUnspentOptions),
  )
 import qualified Bitcoin.Core.RPC as RPC
 import Bitcoin.Core.Regtest.Framework (NodeHandle, oneBitcoin, runBitcoind)
@@ -25,23 +23,24 @@ import Control.Monad.Fix (fix)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict (
-    StateT (StateT),
+    StateT,
     evalStateT,
     gets,
-    mapStateT,
     modify',
+    state,
  )
 import Data.ByteString (ByteString)
+import qualified Data.ByteString as BS
 import Data.Foldable (foldl')
 import Data.Functor (void)
-import Data.List (uncons, unfoldr)
+import Data.List (sortOn, uncons, unfoldr)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
 import qualified Data.Serialize as S
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Data.Word (Word64)
+import Data.Word (Word64, Word8)
 import Haskoin (
     Script (Script),
     TxHash,
@@ -80,9 +79,9 @@ amountPerOutput = 20000
 outputsPerSeries :: [Word64]
 outputsPerSeries =
     mconcat
-        [ replicate 20 100 -- 20 txs with 100 outputs
-        , replicate 30 5 -- 30 txs with 5 outputs
-        , replicate 100 2 -- 100 txs with 2 outputs
+        [ replicate 12 100 -- 12 txs with 100 outputs
+        , replicate 18 5 -- 18 txs with 5 outputs
+        , replicate 60 2 -- 60 txs with 2 outputs
         ]
 
 -- | Funding configuration
@@ -104,7 +103,7 @@ generateWithTransactions ::
     (BlockHeight -> Word64) ->
     IO ()
 generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = do
-    run initialize
+    initFloodState <- run initialize
 
     (async >=> link) . run . RPC.withWallet miningWallet $ case funding of
         Just (Faucet getExternalAddress) ->
@@ -115,15 +114,15 @@ generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = d
         Just (OneTime payouts) -> mapM_ (uncurry handlePayout) payouts
         _ -> pure ()
 
-    run . flip evalStateT mempty . waitRepeat blockInterval $ do
-        mapStateT (RPC.withWallet floodingWallet) $ txFlood getMeanFeeRate
-        blockHash <- lift . generatorGenerate =<< getSeriesCount
-        liftIO . putStrLn $ "New block: " <> show blockHash
+    run . flip evalStateT initFloodState . waitRepeat blockInterval $ do
+        txFlood getMeanFeeRate
+        getSeriesCount
+            >>= fmap snd . lift . generatorGenerate
+            >>= mapM_ pushRoots
   where
     run = runBitcoind mgr nodeHandle >=> either throwIO pure
 
     miningWallet = "bitcoin-regtest-generator.mine"
-    floodingWallet = "bitcoin-regtest-generator.flood"
 
     newWallet name = do
         RPC.createWallet
@@ -138,29 +137,55 @@ generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = d
 
     initialize = do
         newWallet miningWallet
-        newWallet floodingWallet
-
-        RPC.withWallet miningWallet . sweep . (* 15) . getMeanFeeRate =<< RPC.getBlockCount
-        replicateM_ 5 $ generatorGenerate 0
-
-        balance <- RPC.withWallet miningWallet getBalance
+        floodRoots <- sweep
+        let balance = sum $ floodAmount <$> floodRoots
         unless (balance > 0) . replicateM_ 100 $ generatorGenerate 0
+        pure FloodState{floodRoots, floodSeries = mempty}
 
     generatorGenerate nSeries = do
         addr <- RPC.withWallet miningWallet newAddress
-        blockHash <- RPC.generateToAddress 1 addr Nothing
         balance <- RPC.withWallet miningWallet getBalance
-        when (balance >= satRequirement && nSeries <= maxSeries) fundFloodWallet
-        pure blockHash
+        fundRootTx <-
+            if balance >= satRequirement && nSeries <= maxSeries
+                then Just <$> fundFloodWallet
+                else pure Nothing
+        (,fundRootTx) <$> RPC.generateToAddress 1 addr Nothing
 
     fundFloodWallet = do
-        addressAmounts <-
-            RPC.withWallet floodingWallet $
-                traverse getAddressAmount outputsPerSeries
+        let addressAmounts =
+                uncurry getAddressAmount <$> zip [0 ..] outputsPerSeries
         feeRate <- getMeanFeeRate <$> RPC.getBlockCount
-        void . RPC.withWallet miningWallet $ spend feeRate addressAmounts
+        RPC.withWallet miningWallet (spend feeRate addressAmounts)
+            >>= (`RPC.getRawTransaction` Nothing)
 
-    getAddressAmount nOutputs = (,amountPerOutput * nOutputs) <$> newAddress
+    pushRoots tx =
+        mapM_ pushFloodRoot
+            . zipMerge
+                (getOutPointAmount $ H.txHash tx)
+                snd
+                (H.scriptOutput . snd)
+                batchAddresses
+            . sortOn (H.scriptOutput . snd)
+            . zip [0 ..]
+            $ H.txOut tx
+
+    batchAddresses =
+        sortOn snd $
+            (id &&& easySpendScriptOutput . Just)
+                <$> [0 ..]
+
+    getOutPointAmount txh (ix, _) (vout, txOut) =
+        FloodRootPoint
+            { floodOutPoint = OutPoint txh vout
+            , floodOutPointLabel = Just ix
+            , floodAmount = H.outValue txOut
+            , floodSwept = False
+            }
+
+    getAddressAmount ix nOutputs =
+        ( easySpendAddress $ Just ix
+        , amountPerOutput * nOutputs
+        )
 
     newAddress = RPC.getNewAddress Nothing Nothing
 
@@ -177,6 +202,30 @@ generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = d
 satRequirement :: Word64
 satRequirement = sum $ (* amountPerOutput) <$> outputsPerSeries
 
+data FloodRootPoint = FloodRootPoint
+    { floodOutPoint :: OutPoint
+    , floodOutPointLabel :: Maybe Word8
+    , floodAmount :: Word64
+    , floodSwept :: Bool
+    }
+    deriving (Eq, Show)
+
+data FloodState = FloodState
+    { floodRoots :: [FloodRootPoint]
+    , floodSeries :: [TxSeries]
+    }
+    deriving (Eq, Show)
+
+pushFloodRoot :: Monad m => FloodRootPoint -> StateT FloodState m ()
+pushFloodRoot rootPoint = modify' $ \floodState ->
+    floodState{floodRoots = rootPoint : floodRoots floodState}
+
+flushFloodRoots :: Monad m => Int -> StateT FloodState m [FloodRootPoint]
+flushFloodRoots n = do
+    (flushedRoots, remainingRoots) <- splitAt n <$> gets floodRoots
+    modify' $ \floodState -> floodState{floodRoots = remainingRoots}
+    pure flushedRoots
+
 {- | Create many transactions and fill up blockspace.  This uses the same trick
  as the Bitcoin Core functional tests: create anyone can spend outputs with
  predictable outputs to avoid needing to sign.
@@ -188,90 +237,59 @@ satRequirement = sum $ (* amountPerOutput) <$> outputsPerSeries
 txFlood ::
     -- | Fee rate per block
     (BlockHeight -> Word64) ->
-    StateT [TxSeries] BitcoindClient [TxHash]
+    StateT FloodState BitcoindClient [TxHash]
 txFlood feeRate = do
-    balance <- lift getBalance
+    balance <- getFloodBalance
     nSeries <- getSeriesCount
     when (balance >= satRequirement && nSeries <= maxSeries) $ do
         height <- lift RPC.getBlockCount
         -- Create a series out of every unspent output
-        unspentOutputs <- lift getUnspent
-        -- We use coin control to make sure that the wallet spends outputs
-        -- in a predictable way
-        lift . RPC.lockUnspent False $ fst <$> unspentOutputs
-        mapM_ (createSeries height) unspentOutputs
+        mapM_ (createSeries height) =<< flushFloodRoots maxSeries
     flood
   where
-    createSeries height (outPoint, amount) = do
-        lift $ RPC.lockUnspent True [outPoint]
-        fund (fromIntegral nOutputs) (feeRate height) amount
+    createSeries height floodRootPoint =
+        buildSeries (fromIntegral nOutputs) (feeRate height) floodRootPoint
       where
-        nOutputs = amount `quot` amountPerOutput
+        nOutputs = max 1 $ floodAmount floodRootPoint `quot` amountPerOutput
 
-    getUnspent =
-        fmap extractPointAmount
-            <$> RPC.listUnspent
-                Nothing
-                Nothing
-                Nothing
-                Nothing
-                (ListUnspentOptions Nothing Nothing Nothing Nothing)
-    extractPointAmount =
-        (OutPoint <$> RPC.outputTxId <*> RPC.outputVOut) &&& RPC.outputAmount
+getFloodBalance :: StateT FloodState BitcoindClient Word64
+getFloodBalance = gets $ sum . fmap floodAmount . floodRoots
 
 getBalance :: BitcoindClient Word64
 getBalance = RPC.balanceDetailsTrusted . RPC.balancesMine <$> RPC.getBalances
 
-getSeriesCount :: Monad m => StateT [TxSeries] m Int
-getSeriesCount = gets length
+getSeriesCount :: Monad m => StateT FloodState m Int
+getSeriesCount = gets $ length . floodSeries
 
 type TxSeries = [Tx]
 
 -- | Create the funding anchor for a tx series and add the tx series to the internal state
-fund ::
+buildSeries ::
     -- | Output count per transaction
     Int ->
     -- | Fee rate
     Word64 ->
-    -- | Sats to allocate
-    Word64 ->
-    StateT [TxSeries] BitcoindClient TxHash
-fund nOutputs feeRate sats = do
-    (value, outPoint) <- lift createFundingOutput
-    modify' $ (:) (take seriesLength $ txSeries nOutputs feePerOutput value outPoint)
-    pure $ H.outPointHash outPoint
+    FloodRootPoint ->
+    StateT FloodState BitcoindClient ()
+buildSeries nOutputs feeRate floodRootPoint =
+    modify' . updateSeries $
+        (:) (take seriesLength $ txSeries nOutputs feePerOutput floodRootPoint)
   where
-    createFundingOutput = do
-        tx <- createRoot >>= (`RPC.getRawTransaction` Nothing)
-        pure
-            ( H.outValue . head $ H.txOut tx
-            , OutPoint (H.txHash tx) 0
-            )
-
-    createRoot =
-        RPC.sendToAddress
-            easySpendAddress
-            sats
-            Nothing
-            Nothing
-            (Just True)
-            Nothing
-            Nothing
-            Nothing
-            Nothing
-            (Just feeRate)
-
     feePerOutput = feeRate * 75 -- tuned via testing
+    updateSeries f floodState = floodState{floodSeries = f $ floodSeries floodState}
 
 -- | Peel off the next transaction from each series and broadcast it
-flood :: StateT [TxSeries] BitcoindClient [TxHash]
-flood = StateT (pure . advance) >>= lift . traverse (`RPC.sendTransaction` Nothing)
+flood :: StateT FloodState BitcoindClient [TxHash]
+flood = advance >>= lift . traverse (`RPC.sendTransaction` Nothing)
 
-advance :: [TxSeries] -> ([Tx], [TxSeries])
-advance = peelFirst &&& dropFirst
+advance :: Monad m => StateT FloodState m [Tx]
+advance = state . asFloodStateUpdate $ peelFirst &&& dropFirst
   where
     peelFirst = mapMaybe (fmap fst . uncons)
     dropFirst = filter (not . null) . fmap (drop 1)
+    asFloodStateUpdate f floodState = (x, floodState{floodSeries = newSeries})
+      where
+        (x, newSeries) = f $ floodSeries floodState
 
 {- | Construct a sequence of transactions each of which spends all of the inputs of the previous
  one, creating the same number of outputs
@@ -281,30 +299,29 @@ txSeries ::
     Int ->
     -- | Fee per output
     Word64 ->
-    -- | Funds for the series
-    Word64 ->
-    OutPoint ->
+    FloodRootPoint ->
     TxSeries
-txSeries nOutputs feePerOutput totalSats fundingPoint =
+txSeries nOutputs feePerOutput floodRootPoint =
     unfoldr (sequence . (id &&& getNext)) tx0
   where
     tx0 =
         Tx
             { H.txVersion = 2
-            , H.txIn = [spendEasy fundingPoint]
-            , H.txOut = replicate nOutputs $ easySpendOutput satsPerOutput0
+            , H.txIn =
+                [spendEasy <$> floodOutPointLabel <*> floodOutPoint $ floodRootPoint]
+            , H.txOut = replicate nOutputs $ easySpendOutput Nothing satsPerOutput0
             , H.txWitness = mempty
             , H.txLockTime = 0
             }
-    satsPerOutput0 = (totalSats `quot` fromIntegral nOutputs) - feePerOutput
+    satsPerOutput0 = (floodAmount floodRootPoint `quot` fromIntegral nOutputs) - feePerOutput
 
     getNext prevTx
         | satsPerOutput > 2 * feePerOutput =
             Just
                 Tx
                     { H.txVersion = 2
-                    , H.txIn = spendEasy <$> outPoints prevTx
-                    , H.txOut = replicate nOutputs $ easySpendOutput satsPerOutput
+                    , H.txIn = spendEasy Nothing <$> outPoints prevTx
+                    , H.txOut = replicate nOutputs $ easySpendOutput Nothing satsPerOutput
                     , H.txWitness = mempty
                     , H.txLockTime = 0
                     }
@@ -337,19 +354,10 @@ data BlockDelta = BlockDelta
 some of them into the mining wallet.  This makes it possible to avoid starting
 out by mining 100 blocks.
 -}
-sweep ::
-    -- | Fee per input
-    Word64 ->
-    BitcoindClient Int
-sweep feePerInput = do
+sweep :: BitcoindClient [FloodRootPoint]
+sweep = do
     currentHeight <- RPC.getBlockCount
-    sweepableOutputs <- foldM onBlockHeight mempty [0 .. currentHeight]
-    mapM_ onOutputCluster
-        . take 500
-        . groupsOf 100
-        . Set.toList
-        $ sweepableOutputs
-    pure $ Set.size sweepableOutputs
+    fmap toFloodRootPoint . Set.toList <$> foldM onBlockHeight mempty [0 .. currentHeight]
   where
     onBlockHeight !utxos n = updateUtxoSet utxos <$> getSpentUnspent n
     getSpentUnspent = RPC.getBlockHash >=> fmap onBlock . RPC.getBlock
@@ -368,7 +376,6 @@ sweep feePerInput = do
                         tx
             }
     outPointValue txHash (ix, txOut) = (OutPoint txHash ix, H.outValue txOut)
-    isEasySpend txOut = H.scriptOutput txOut == easySpendScriptOutput
     finalizeBlockDelta delta =
         BlockDelta
             { blockSpends = blockSpends delta
@@ -378,53 +385,72 @@ sweep feePerInput = do
     updateUtxoSet utxos delta = Set.filter (isUnspent delta) utxos <> blockCreates delta
     isUnspent delta (outPoint, _) = not . Set.member outPoint $ blockSpends delta
 
-    onOutputCluster outputs = do
-        scriptOutput <-
-            RPC.getNewAddress Nothing Nothing
-                >>= maybe
-                    (error "Unable to decode address")
-                    (pure . H.addressToScriptBS)
-                    . H.textToAddr H.btcRegTest
-        RPC.sendTransaction
-            ( Tx
-                { txVersion = 2
-                , txIn = spendEasy . fst <$> outputs
-                , txOut =
-                    [ H.TxOut
-                        { H.outValue = sum (subtract feePerInput . snd <$> outputs)
-                        , H.scriptOutput
-                        }
-                    ]
-                , txWitness = mempty
-                , txLockTime = 0
-                }
-            )
-            Nothing
+    toFloodRootPoint (floodOutPoint, floodAmount) =
+        FloodRootPoint
+            { floodOutPoint
+            , floodOutPointLabel = Nothing
+            , floodAmount
+            , floodSwept = True
+            }
 
-    groupsOf n = \case
-        [] -> []
-        xs -> uncurry (:) $ groupsOf n <$> splitAt n xs
+easySpendScript :: Maybe Word8 -> Script
+easySpendScript = Script . maybe mempty mkScript
+  where
+    mkScript ix =
+        [ pushData ix
+        , H.OP_DROP
+        ]
+    pushData ix
+        | ix == 0 = H.OP_0
+        | ix <= 16 = H.intToScriptOp (fromIntegral ix)
+        | otherwise = H.opPushData $ BS.pack [ix]
 
-easySpendAddress :: Text
-Just easySpendAddress =
-    H.addrToText H.btcRegTest =<< (H.outputAddress . H.toP2SH) (Script mempty)
+easySpendAddress :: Maybe Word8 -> Text
+easySpendAddress ix = addr
+  where
+    Just addr =
+        H.addrToText H.btcRegTest =<< (H.outputAddress . H.toP2SH) (easySpendScript ix)
 
-easySpendScriptOutput :: ByteString
-easySpendScriptOutput = H.encodeOutputBS . H.toP2SH $ Script mempty
+easySpendScriptOutput :: Maybe Word8 -> ByteString
+easySpendScriptOutput = H.encodeOutputBS . H.toP2SH . easySpendScript
 
 -- | Produce an output that we can spend without signing
-easySpendOutput :: Word64 -> TxOut
-easySpendOutput outValue = TxOut{H.outValue, H.scriptOutput = easySpendScriptOutput}
+easySpendOutput :: Maybe Word8 -> Word64 -> TxOut
+easySpendOutput ix outValue = TxOut{H.outValue, H.scriptOutput = easySpendScriptOutput ix}
+
+-- | This only detects easy spend outputs with an empty script
+isEasySpend :: TxOut -> Bool
+isEasySpend txOut = H.scriptOutput txOut == easySpendScriptOutput Nothing
 
 -- | Produce an input that spends an output created with 'easySpendOutput'
-spendEasy :: OutPoint -> TxIn
-spendEasy prevOutput =
+spendEasy :: Maybe Word8 -> OutPoint -> TxIn
+spendEasy ix prevOutput =
     TxIn
         { H.prevOutput
-        , H.scriptInput = S.encode $ Script [H.OP_1, H.opPushData (S.encode $ Script mempty)]
+        , H.scriptInput = S.encode $ Script [H.OP_1, H.opPushData (S.encode $ easySpendScript ix)]
         , H.txInSequence = maxBound
         }
 
 waitRepeat :: MonadIO m => Int -> m a -> m ()
 waitRepeat delayInSecs task =
     forever $ task >> (liftIO . threadDelay) (delayInSecs * 1_000_000)
+
+{- | Given two lists sorted by the value of the provided keying functions, merge
+the equal entries using the combining function.
+-}
+zipMerge ::
+    Ord k =>
+    (a -> b -> c) ->
+    (a -> k) ->
+    (b -> k) ->
+    [a] ->
+    [b] ->
+    [c]
+zipMerge _ _ _ [] _ = []
+zipMerge _ _ _ _ [] = []
+zipMerge f pA pB xs@(x : remXs) ys@(y : remYs) = case compare (pA x) (pB y) of
+    LT -> go remXs ys
+    EQ -> f x y : go remXs remYs
+    GT -> go xs remYs
+  where
+    go = zipMerge f pA pB
