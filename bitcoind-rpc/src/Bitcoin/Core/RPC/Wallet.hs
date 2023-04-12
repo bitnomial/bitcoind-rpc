@@ -972,8 +972,8 @@ instance FromJSON GetTxOutputDetails where
 
 -- | @since 0.3.0.0
 data GetTransactionResponse = GetTransactionResponse
-    { getTxAmount :: Word64
-    -- ^ The amount in sats
+    { getTxAmount :: Integer
+    -- ^ The amount in sats (could be negative when the transaction is a net spend)
     , getTxFee :: Maybe Word64
     -- ^ The fee in sats (for "send" transactions)
     , getTxConfs :: Int
