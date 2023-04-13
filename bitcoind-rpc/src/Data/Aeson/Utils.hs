@@ -55,7 +55,7 @@ utcTime :: Word64 -> UTCTime
 utcTime = posixSecondsToUTCTime . fromIntegral
 
 -- | Convert BTC to Satoshis
-toSatoshis :: Scientific -> Word64
+toSatoshis :: Integral a => Scientific -> a
 toSatoshis = floor . (* satsPerBTC)
 
 satsPerBTC :: Num a => a
