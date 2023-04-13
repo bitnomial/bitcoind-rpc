@@ -31,8 +31,8 @@ library
         Servant.Bitcoind
 
     build-depends:
-          aeson >=2.0 && <2.1
-        , base >=4.12 && <4.17
+          aeson >=2.0 && <2.2
+        , base >=4.12 && <4.18
         , base64 ^>=0.4
         , bytestring >=0.10 && <0.12
         , bitcoin-compact-filters ^>=0.1

@@ -3,6 +3,7 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Bitcoin.Core.Regtest.Generator (
     Funding (..),
