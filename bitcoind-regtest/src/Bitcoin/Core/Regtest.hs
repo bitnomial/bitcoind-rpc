@@ -15,7 +15,10 @@ module Bitcoin.Core.Regtest (
     spendPackageOutputs,
 
     -- * Simulation
-    Funding (..),
+    GeneratorConfig (..),
+    GeneratorStatus (..),
+    GeneratorState (..),
+    GeneratorHandle (..),
     generateWithTransactions,
 
     -- * Internal wallet

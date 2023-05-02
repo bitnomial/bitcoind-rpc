@@ -12,19 +12,21 @@ import Bitcoin.Core.RPC (
     syncedBlocks,
  )
 import Bitcoin.Core.Regtest (
-    Funding (OneTime),
+    GeneratorConfig (GeneratorConfig),
     generateWithTransactions,
     nodeP2pPort,
     runBitcoind,
     withBitcoind,
  )
+import qualified Bitcoin.Core.Regtest as R
 import Control.Applicative (many)
 import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (wait)
 import Control.Exception (throwIO)
 import Control.Monad (forM_, (<=<))
 import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (listToMaybe)
-import Data.Text (pack)
+import Data.Text (Text, pack)
 import Data.Word (Word64)
 import Haskoin (BlockHeight)
 import Network.HTTP.Client (defaultManagerSettings, newManager)
@@ -35,7 +37,7 @@ data Config = Config
     { basePort :: Int
     , blockInterval :: Int
     , peerPort :: Maybe Int
-    , initialFunding :: Funding
+    , initialFunding :: [(Text, Word64)]
     }
 
 options :: ParserInfo Config
@@ -48,12 +50,12 @@ options = Opt.info (opts <**> Opt.helper) desc
             <$> optBasePort
             <*> optBlockInterval
             <*> optional optPeerPort
-            <*> (OneTime <$> many optFunding)
+            <*> many optFunding
 
     optBasePort =
         Opt.option Opt.auto $
             Opt.long "basePort"
-                <> Opt.value 18044
+                <> Opt.value 18_044
                 <> Opt.help "The first in the sequence of ports the miner will use"
                 <> Opt.showDefault
 
@@ -95,12 +97,16 @@ main = do
                 waitSync
 
         putStrLn "Generating blocks..."
-        generateWithTransactions
-            mgr
-            nodeHandle
-            (blockInterval config)
-            (Just $ initialFunding config)
-            oscillatingFeeRate
+        genHandle <-
+            generateWithTransactions
+                mgr
+                nodeHandle
+                GeneratorConfig
+                    { R.blockInterval = blockInterval config
+                    , R.getMeanFeeRate = oscillatingFeeRate
+                    }
+        R.makePayment genHandle $ initialFunding config
+        wait $ R.generatorAsync genHandle
 
 oscillatingFeeRate :: BlockHeight -> Word64
 oscillatingFeeRate n
