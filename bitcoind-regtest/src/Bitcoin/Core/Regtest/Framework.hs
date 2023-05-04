@@ -41,7 +41,13 @@ module Bitcoin.Core.Regtest.Framework (
 ) where
 
 import Control.Concurrent (threadDelay)
-import Control.Exception (Exception, bracket, throwIO)
+import Control.Exception (
+    Exception,
+    SomeException (SomeException),
+    bracket,
+    catch,
+    throwIO,
+ )
 import Control.Monad (void)
 import Data.Attoparsec.Text (char, decimal, parseOnly, sepBy, string)
 import qualified Data.Serialize as S
@@ -77,7 +83,7 @@ import Haskoin.Transaction (
     txHash,
  )
 import Haskoin.Util (encodeHex, maybeToEither)
-import Network.HTTP.Client (Manager)
+import Network.HTTP.Client (Manager, defaultManagerSettings, newManager)
 import Servant.API (BasicAuthData)
 import System.Directory (createDirectoryIfMissing)
 import System.IO (Handle, IOMode (..), openFile)
@@ -134,19 +140,38 @@ withBitcoind basePort dataDir k = do
         createDirectoryIfMissing True $ dd <> "/regtest/wallets"
         tmp <- getCanonicalTemporaryDirectory
         bracket (initBitcoind tmp dd basePort) stopBitcoind . const $ do
-            auth <- basicAuthFromCookie $ dd <> "/regtest/.cookie"
-            k $
-                NodeHandle
-                    basePort
-                    (getRpcPort basePort)
-                    auth
-                    (rawTxSocket dd)
-                    (rawBlockSocket dd)
-                    v
+            auth <-
+                retryOnError 1_000_000
+                    . basicAuthFromCookie
+                    $ dd <> "/regtest/.cookie"
+            let nodeHandle =
+                    NodeHandle
+                        basePort
+                        (getRpcPort basePort)
+                        auth
+                        (rawTxSocket dd)
+                        (rawBlockSocket dd)
+                        v
+            mgr <- newManager defaultManagerSettings
+            waitForRPC mgr nodeHandle
+            k nodeHandle
   where
     withDataDir onDataDir
         | Just dd <- dataDir = onDataDir dd
         | otherwise = withSystemTempDirectory "bitcoind-rpc-tests" onDataDir
+    waitForRPC mgr nodeHandle =
+        retryOnEither 1_000_000 $ runBitcoind mgr nodeHandle RPC.getBlockCount
+
+retryOnError :: Int -> IO a -> IO a
+retryOnError delay task =
+    catch task $ \SomeException{} ->
+        threadDelay delay >> retryOnError delay task
+
+retryOnEither :: Int -> IO (Either e a) -> IO a
+retryOnEither delay task =
+    task >>= either onLeft pure
+  where
+    onLeft _ = threadDelay delay >> retryOnEither delay task
 
 peerWith :: Manager -> NodeHandle -> NodeHandle -> IO ()
 peerWith mgr nodeA nodeB =
@@ -158,7 +183,7 @@ initBitcoind :: FilePath -> FilePath -> Int -> IO ProcessHandle
 initBitcoind tmp ddir basePort = do
     logH <- openFile (tmp <> "/bitcoind-rpc-" <> show basePort <> ".log") WriteMode
     (_, _, _, h) <- createProcess $ bitcoind ddir basePort logH
-    h <$ threadDelay 1_000_000
+    pure h
 
 stopBitcoind :: ProcessHandle -> IO ()
 stopBitcoind h = terminateProcess h >> void (waitForProcess h)
@@ -189,8 +214,9 @@ bitcoind ddir basePort output =
         }
   where
     args =
-        [ "-regtest"
+        [ "-chain=regtest"
         , "-txindex"
+        , "-server"
         , "-blockfilterindex=1"
         , "-walletdir=" <> ddir <> "/regtest/wallets"
         , "-datadir=" <> ddir
