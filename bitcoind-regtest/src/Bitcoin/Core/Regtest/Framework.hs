@@ -13,6 +13,9 @@ module Bitcoin.Core.Regtest.Framework (
     withBitcoind,
     peerWith,
 
+    -- * Command line
+    dumpCommandLine,
+
     -- * Funding
     oneBitcoin,
     createOutput,
@@ -84,7 +87,7 @@ import Haskoin.Transaction (
  )
 import Haskoin.Util (encodeHex, maybeToEither)
 import Network.HTTP.Client (Manager, defaultManagerSettings, newManager)
-import Servant.API (BasicAuthData)
+import Servant.API (BasicAuthData (..))
 import System.Directory (createDirectoryIfMissing)
 import System.IO (Handle, IOMode (..), openFile)
 import System.IO.Temp (getCanonicalTemporaryDirectory, withSystemTempDirectory)
@@ -106,6 +109,7 @@ import Bitcoin.Core.RPC (
     basicAuthFromCookie,
  )
 import qualified Bitcoin.Core.RPC as RPC
+import Data.Text.Encoding (decodeUtf8)
 
 type Version = (Int, Int, Int)
 
@@ -118,6 +122,16 @@ data NodeHandle = NodeHandle
     , nodeRawBlock :: FilePath
     , nodeVersion :: Version
     }
+
+dumpCommandLine :: NodeHandle -> Text
+dumpCommandLine h =
+    Text.unwords
+        [ "bitcoin-cli"
+        , "-chain=regtest"
+        , "-rpcport=" <> (Text.pack . show . nodeRpcPort) h
+        , "-rpcuser=" <> (decodeUtf8 . basicAuthUsername . nodeAuth) h
+        , "-rpcpassword=" <> (decodeUtf8 . basicAuthPassword . nodeAuth) h
+        ]
 
 portsInUse :: NodeHandle -> [Int]
 portsInUse NodeHandle{nodeRpcPort} = [nodeRpcPort - 1, nodeRpcPort]

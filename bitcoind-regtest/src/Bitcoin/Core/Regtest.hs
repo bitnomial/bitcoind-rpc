@@ -6,6 +6,7 @@ module Bitcoin.Core.Regtest (
     runBitcoind,
     withBitcoind,
     peerWith,
+    dumpCommandLine,
 
     -- * Funding
     oneBitcoin,
