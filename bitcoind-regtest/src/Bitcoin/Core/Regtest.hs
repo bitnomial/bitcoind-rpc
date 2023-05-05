@@ -6,6 +6,7 @@ module Bitcoin.Core.Regtest (
     runBitcoind,
     withBitcoind,
     peerWith,
+    dumpCommandLine,
 
     -- * Funding
     oneBitcoin,
@@ -14,7 +15,10 @@ module Bitcoin.Core.Regtest (
     spendPackageOutputs,
 
     -- * Simulation
-    Funding (..),
+    GeneratorConfig (..),
+    GeneratorStatus (..),
+    GeneratorState (..),
+    GeneratorHandle (..),
     generateWithTransactions,
 
     -- * Internal wallet

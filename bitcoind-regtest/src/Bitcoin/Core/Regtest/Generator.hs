@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -6,7 +7,10 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module Bitcoin.Core.Regtest.Generator (
-    Funding (..),
+    GeneratorConfig (..),
+    GeneratorStatus (..),
+    GeneratorState (..),
+    GeneratorHandle (..),
     generateWithTransactions,
 ) where
 
@@ -14,14 +18,13 @@ import Bitcoin.Core.RPC (
     BitcoindClient,
  )
 import qualified Bitcoin.Core.RPC as RPC
-import Bitcoin.Core.Regtest.Framework (NodeHandle, oneBitcoin, runBitcoind)
+import Bitcoin.Core.Regtest.Framework (NodeHandle, runBitcoind)
 import Control.Arrow ((&&&))
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (async, link)
+import Control.Concurrent.Async (Async, async, link)
 import Control.Exception (throwIO)
-import Control.Monad (foldM, forever, replicateM_, unless, when, (>=>))
-import Control.Monad.Fix (fix)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad (foldM, replicateM_, unless, when, (>=>))
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict (
     StateT,
@@ -30,10 +33,12 @@ import Control.Monad.Trans.State.Strict (
     modify',
     state,
  )
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldl')
 import Data.Functor (void)
+import Data.IORef (atomicModifyIORef', newIORef, readIORef)
 import Data.List (sortOn, uncons, unfoldr)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (mapMaybe)
@@ -56,10 +61,6 @@ import Haskoin.Transaction (
  )
 import Network.HTTP.Client (Manager)
 
--- | How much to pay out on each faucet request
-faucetPayment :: Word64
-faucetPayment = oneBitcoin
-
 -- | If the series count exceeds this value, stop generating series
 maxSeries :: Int
 maxSeries = seriesLength * seriesCount
@@ -74,7 +75,7 @@ seriesLength = 10
 
 -- | Initial amount per output
 amountPerOutput :: Word64
-amountPerOutput = 20000
+amountPerOutput = 20_000
 
 -- | This value determines the transaction series that will fill up the mempool
 outputsPerSeries :: [Word64]
@@ -85,41 +86,130 @@ outputsPerSeries =
         , replicate 60 2 -- 60 txs with 2 outputs
         ]
 
--- | Funding configuration
-data Funding
-    = -- | Send 1BTC each time the action produces an address
-      Faucet (IO (Maybe Text))
-    | -- | Send a certain amount of bitcoin once
-      OneTime [(Text, Word64)]
+data GeneratorConfig = GeneratorConfig
+    { blockInterval :: Int
+    -- ^ Block interval (seconds per block)
+    , getMeanFeeRate :: BlockHeight -> Word64
+    -- ^ Mean fee rate at height
+    }
+
+data GeneratorStatus
+    = Starting
+    | Running
+    | Paused
+    | Stopped
+    deriving (Eq, Show)
+
+data GeneratorState = GeneratorState
+    { status :: GeneratorStatus
+    , balance :: Word64
+    , blocksMined :: Int
+    }
+    deriving (Eq, Show)
+
+data GeneratorHandle = GeneratorHandle
+    { getGeneratorState :: IO GeneratorState
+    , pauseGenerator :: IO ()
+    , resumeGenerator :: IO ()
+    , stopGenerator :: IO ()
+    , makePayment :: [(Text, Word64)] -> IO ()
+    , reconfigure :: GeneratorConfig -> IO ()
+    , generatorAsync :: Async ()
+    -- ^ Use to wait on the generator process
+    }
 
 -- | Generate many transactions per block with a certain mean fee rate
 generateWithTransactions ::
     Manager ->
     NodeHandle ->
-    -- | Block interval (seconds per block)
-    Int ->
-    -- | Optional funding behavior
-    Maybe Funding ->
-    -- | Mean fee rate at height
-    (BlockHeight -> Word64) ->
-    IO ()
-generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = do
-    initFloodState <- run initialize
+    GeneratorConfig ->
+    IO GeneratorHandle
+generateWithTransactions mgr nodeHandle initGeneratorConfig = do
+    refState <-
+        newIORef
+            GeneratorState
+                { status = Starting
+                , balance = 0
+                , blocksMined = 0
+                }
+    refConfig <- newIORef initGeneratorConfig
+    refPaymentQueue <- newIORef mempty
+    refStatusRequest <- newIORef Nothing
 
-    (async >=> link) . run . RPC.withWallet miningWallet $ case funding of
-        Just (Faucet getExternalAddress) ->
-            waitRepeat 1 $ do
-                balance <- getBalance
-                when (balance >= faucetPayment) $
-                    liftIO getExternalAddress >>= mapM_ (fundAddress faucetPayment)
-        Just (OneTime payouts) -> mapM_ (uncurry handlePayout) payouts
-        _ -> pure ()
+    let getStatus = status <$> readIORef refState
+        setStatus status =
+            atomicModifyIORef' refState $
+                \genState -> (genState{status}, status)
+        requestStatus =
+            atomicModifyIORef' refStatusRequest . updateRef . const . Just
+        onStatusRequest theStatus = do
+            -- Clear the existing status request
+            atomicModifyIORef' refStatusRequest . updateRef $ const Nothing
+            setStatus theStatus
+        addBlocks n = atomicModifyIORef' refState . updateRef $ \genState ->
+            genState
+                { blocksMined = n + blocksMined genState
+                }
+        handlePayments config balance = do
+            feeRate <- getMeanFeeRate config <$> lift RPC.getBlockCount
+            payments <-
+                (liftIO . atomicModifyIORef' refPaymentQueue)
+                    (first reverse . popPayments balance . reverse)
+            unless (null payments)
+                . void
+                . lift
+                . RPC.withWallet miningWallet
+                -- Use a higher feerate to jump the line
+                $ spend (feeRate + 10) payments
+        mainLoop = do
+            liftIO
+                (readIORef refStatusRequest)
+                >>= liftIO . maybe getStatus onStatusRequest
+                >>= \case
+                    -- We are done
+                    Stopped -> pure ()
+                    -- Poll rather than doing a round
+                    Paused -> do
+                        config <- liftIO $ readIORef refConfig
+                        balance <- lift $ RPC.withWallet miningWallet getBalance
+                        handlePayments config balance
+                        liftIO (threadDelay oneSec)
+                        mainLoop
+                    _ -> do
+                        config <- liftIO $ readIORef refConfig
+                        txFlood $ getMeanFeeRate config
+                        getSeriesCount
+                            >>= fmap snd . lift . generatorGenerate config
+                            >>= mapM_ pushRoots
+                        liftIO $ addBlocks 1
+                        -- Update the balance
+                        balance <- lift $ RPC.withWallet miningWallet getBalance
+                        liftIO
+                            . atomicModifyIORef' refState
+                            . updateRef
+                            $ \genState -> genState{balance}
+                        -- Payments
+                        handlePayments config balance
+                        -- Delay until next round
+                        liftIO . threadDelay $ blockInterval config * oneSec
+                        mainLoop
 
-    run . flip evalStateT initFloodState . waitRepeat blockInterval $ do
-        txFlood getMeanFeeRate
-        getSeriesCount
-            >>= fmap snd . lift . generatorGenerate
-            >>= mapM_ pushRoots
+    generatorAsync <- async $ do
+        (initFloodState, initBlocks) <- run initialize
+        addBlocks initBlocks
+        setStatus Running
+        run $ evalStateT mainLoop initFloodState
+    link generatorAsync
+    pure
+        GeneratorHandle
+            { getGeneratorState = readIORef refState
+            , pauseGenerator = requestStatus Paused
+            , resumeGenerator = requestStatus Running
+            , stopGenerator = requestStatus Stopped
+            , makePayment = atomicModifyIORef' refPaymentQueue . updateRef . (<>)
+            , reconfigure = atomicModifyIORef' refConfig . updateRef . const
+            , generatorAsync
+            }
   where
     run = runBitcoind mgr nodeHandle >=> either throwIO pure
 
@@ -140,22 +230,23 @@ generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = d
         newWallet miningWallet
         floodRoots <- sweep
         let balance = sum $ floodAmount <$> floodRoots
-        unless (balance > 0) . replicateM_ 100 $ generatorGenerate 0
-        pure FloodState{floodRoots, floodSeries = mempty}
+            blocksToMine = if balance > 0 then 0 else 100
+        replicateM_ blocksToMine $ generatorGenerate initGeneratorConfig 0
+        pure (FloodState{floodRoots, floodSeries = mempty}, blocksToMine)
 
-    generatorGenerate nSeries = do
+    generatorGenerate config nSeries = do
         addr <- RPC.withWallet miningWallet newAddress
         balance <- RPC.withWallet miningWallet getBalance
         fundRootTx <-
             if balance >= satRequirement && nSeries <= maxSeries
-                then Just <$> fundFloodWallet
+                then Just <$> fundFloodWallet config
                 else pure Nothing
         (,fundRootTx) <$> RPC.generateToAddress 1 addr Nothing
 
-    fundFloodWallet = do
+    fundFloodWallet config = do
         let addressAmounts =
                 uncurry getAddressAmount <$> zip [0 ..] outputsPerSeries
-        feeRate <- getMeanFeeRate <$> RPC.getBlockCount
+        feeRate <- getMeanFeeRate config <$> RPC.getBlockCount
         RPC.withWallet miningWallet (spend feeRate addressAmounts)
             >>= (`RPC.getRawTransaction` Nothing)
 
@@ -190,15 +281,24 @@ generateWithTransactions mgr nodeHandle blockInterval funding getMeanFeeRate = d
 
     newAddress = RPC.getNewAddress Nothing Nothing
 
-    fundAddress amount addr = do
-        feeRate <- getMeanFeeRate <$> RPC.getBlockCount
-        spend feeRate [(addr, amount)]
+popPayments ::
+    -- | Budget
+    Word64 ->
+    -- | Payment queue
+    [(Text, Word64)] ->
+    -- | (remaining payments, feasible payments)
+    ([(Text, Word64)], [(Text, Word64)])
+popPayments = accum mempty
+  where
+    accum payable remainingBalance = \case
+        x@(addr, amount) : xs
+            | amount <= remainingBalance
+            , addr `notElem` (fst <$> payable) ->
+                accum (x : payable) (remainingBalance - amount) xs
+        payments -> (payments, payable)
 
-    handlePayout fundingAddress fundingAmount = fix $ \retry -> do
-        balance <- getBalance
-        if balance >= fundingAmount
-            then void $ fundAddress fundingAmount fundingAddress
-            else liftIO (threadDelay 1_000_000) >> retry
+oneSec :: Int
+oneSec = 1_000_000
 
 satRequirement :: Word64
 satRequirement = sum $ (* amountPerOutput) <$> outputsPerSeries
@@ -432,10 +532,6 @@ spendEasy ix prevOutput =
         , H.txInSequence = maxBound
         }
 
-waitRepeat :: MonadIO m => Int -> m a -> m ()
-waitRepeat delayInSecs task =
-    forever $ task >> (liftIO . threadDelay) (delayInSecs * 1_000_000)
-
 {- | Given two lists sorted by the value of the provided keying functions, merge
 the equal entries using the combining function.
 -}
@@ -455,3 +551,6 @@ zipMerge f pA pB xs@(x : remXs) ys@(y : remYs) = case compare (pA x) (pB y) of
     GT -> go xs remYs
   where
     go = zipMerge f pA pB
+
+updateRef :: (a -> a) -> a -> (a, ())
+updateRef f = f &&& const ()

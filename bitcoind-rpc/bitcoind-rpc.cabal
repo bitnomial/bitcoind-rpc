@@ -43,8 +43,8 @@ library
         , http-types ^>=0.12
         , mtl >=2.2 && <2.4
         , scientific ^>=0.3
-        , servant >=0.15 && <0.20
-        , servant-client >=0.15 && <0.20
+        , servant >=0.19 && <0.20
+        , servant-client >=0.19 && <0.20
         , servant-jsonrpc-client >=1.0 && <1.2
         , text >=1.2 && <2.1
         , time >=1.8 && <1.14
