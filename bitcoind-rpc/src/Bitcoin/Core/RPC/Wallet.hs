@@ -1056,7 +1056,7 @@ data WalletStateInfo = WalletStateInfo
     -- ^ the database format (bdb or sqlite)
     , walletStateTxCount :: Int
     -- ^ the total number of transactions in the wallet
-    , walletStateKeyPoolOldest :: UTCTime
+    , walletStateKeyPoolOldest :: Maybe UTCTime
     -- ^ the UNIX epoch time of the oldest pre-generated key in the key pool. Legacy wallets only.
     , walletStateKeyPoolSize :: Int
     -- ^ how many new keys are pre-generated (only counts external keys)
@@ -1091,7 +1091,7 @@ instance FromJSON WalletStateInfo where
             <*> obj .: "walletversion"
             <*> obj .: "format"
             <*> obj .: "txcount"
-            <*> (utcTime <$> obj .: "keypoololdest")
+            <*> (fmap utcTime <$> obj .:? "keypoololdest")
             <*> obj .: "keypoolsize"
             <*> obj .:? "keypoolsize_hd_internal"
             <*> (fmap utcTime <$> obj .:? "unlocked_until")
