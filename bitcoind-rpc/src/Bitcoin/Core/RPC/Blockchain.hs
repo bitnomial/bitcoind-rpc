@@ -141,6 +141,7 @@ data BlockHeader = BlockHeader
     , blockHeaderTime :: UTCTime
     , blockHeaderMedianTime :: UTCTime
     , blockHeaderNonce :: Word64
+    , blockHeaderDifficulty :: Scientific
     , blockHeaderTxCount :: Int
     , blockHeaderPrevHash :: Maybe Hash256
     , blockHeaderNextHash :: Maybe Hash256
@@ -156,6 +157,7 @@ instance FromJSON BlockHeader where
             <*> (utcTime <$> o .: "time")
             <*> (utcTime <$> o .: "mediantime")
             <*> o .: "nonce"
+            <*> o .: "difficulty"
             <*> o .: "nTx"
             <*> (o .:? "previousblockhash" >>= traverse parseFromHex)
             <*> (o .:? "nextblockhash" >>= traverse parseFromHex)
