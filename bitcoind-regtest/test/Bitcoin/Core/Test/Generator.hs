@@ -7,6 +7,7 @@ module Bitcoin.Core.Test.Generator (
 import Bitcoin.Core.RPC (BitcoindClient)
 import qualified Bitcoin.Core.RPC as RPC
 import Bitcoin.Core.Regtest (
+    GeneratorConfig (..),
     generateWithTransactions,
     runBitcoind,
     withBitcoind,

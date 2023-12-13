@@ -18,3 +18,7 @@ source-repository-package
   type: git
   location: https://github.com/bitnomial/bitcoin-compact-filters
   tag: f161d97e40c82b2256ef661cb5c9d0bd64f1e05d
+
+constraints:
+  -- haskoin-core-0.21.2 needs
+  base16 < 1
