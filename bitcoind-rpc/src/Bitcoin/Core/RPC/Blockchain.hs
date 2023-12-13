@@ -44,7 +44,7 @@ import Data.Serialize (Serialize)
 import Data.Text (Text)
 import Data.Time (NominalDiffTime, UTCTime)
 import Data.Word (Word16, Word32, Word64)
-import Haskoin.Block (Block, BlockHash, BlockHeight)
+import Haskoin.Block (Block, BlockHash, BlockHeight, hexToBlockHash)
 import Haskoin.Crypto (Hash256)
 import Haskoin.Transaction (TxHash)
 import Servant.API ((:<|>) (..))
@@ -143,8 +143,8 @@ data BlockHeader = BlockHeader
     , blockHeaderNonce :: Word64
     , blockHeaderDifficulty :: Scientific
     , blockHeaderTxCount :: Int
-    , blockHeaderPrevHash :: Maybe Hash256
-    , blockHeaderNextHash :: Maybe Hash256
+    , blockHeaderPrevHash :: Maybe BlockHash
+    , blockHeaderNextHash :: Maybe BlockHash
     }
 
 instance FromJSON BlockHeader where
@@ -159,8 +159,10 @@ instance FromJSON BlockHeader where
             <*> o .: "nonce"
             <*> o .: "difficulty"
             <*> o .: "nTx"
-            <*> (o .:? "previousblockhash" >>= traverse parseFromHex)
-            <*> (o .:? "nextblockhash" >>= traverse parseFromHex)
+            <*> (o .:? "previousblockhash" >>= traverse parseBlockHash)
+            <*> (o .:? "nextblockhash" >>= traverse parseBlockHash)
+      where
+        parseBlockHash = maybe (fail "Invalid hex in block hash") pure . hexToBlockHash
 
 parseFromHex :: Serialize a => Text -> Parser a
 parseFromHex = either fail return . decodeFromHex
