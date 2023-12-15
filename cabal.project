@@ -10,14 +10,16 @@ package bitcoind-regtest
 
 source-repository-package
   type: git
-  location: https://github.com/haskell-servant/servant
-  subdir: servant-client
-  tag: v0.19.1
+  location: https://github.com/bitnomial/bitcoin-compact-filters
+  tag: 2ae18e7c7b66f1cfe60529645fce0c9b6536e986
 
 source-repository-package
   type: git
-  location: https://github.com/bitnomial/bitcoin-compact-filters
-  tag: f161d97e40c82b2256ef661cb5c9d0bd64f1e05d
+  location: https://github.com/bitnomial/servant-jsonrpc
+  tag: 938b39d0d0d115f1fceb6b5f5125319d19f82c5f
+  subdir:
+    servant-jsonrpc
+    servant-jsonrpc-client
 
 constraints:
   -- haskoin-core-0.21.2 needs
