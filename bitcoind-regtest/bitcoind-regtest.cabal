@@ -16,7 +16,7 @@ common core
     ghc-options:      -Wall -fno-warn-unused-do-bind
     build-depends:
           async >=2.0 && <2.3
-        , base >=4.12 && <4.18
+        , base >=4.12 && <4.19
         , base64 ^>=0.4
         , bitcoind-rpc ^>=0.3
         , bytestring >=0.10 && <0.12
