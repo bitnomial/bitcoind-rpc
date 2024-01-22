@@ -38,7 +38,7 @@ library
         , bitcoin-compact-filters ^>=0.1
         , cereal ^>=0.5
         , containers ^>=0.6
-        , haskoin-core >=0.17.1 && <0.22
+        , haskoin-core >=1 && <2
         , http-client >=0.6 && <0.8
         , http-types ^>=0.12
         , mtl >=2.2 && <2.4

@@ -118,7 +118,7 @@ import Haskoin (
     DerivPath,
     Hash160,
     OutPoint (OutPoint),
-    PartiallySignedTransaction,
+    PSBT,
     PubKeyI,
     Script,
     SecKey,
@@ -503,7 +503,7 @@ instance ToJSON BumpFeeOptions where
 
 -- | @since 0.3.0.0
 data BumpFeeResponse = BumpFeeResponse
-    { bumpFeePSBT :: Maybe PartiallySignedTransaction
+    { bumpFeePSBT :: Maybe PSBT
     -- ^ The base64-encoded unsigned PSBT of the new transaction. (only available with 'psbtBumpFee')
     , bumpFeeTxId :: Maybe TxHash
     -- ^ The id of the new transaction. Only returned when wallet private keys are enabled.
@@ -2112,7 +2112,7 @@ instance ToJSON CreatePsbtOptions where
 
 -- | @since 0.3.0.0
 data CreatePsbtResponse = CreatePsbtResponse
-    { createPsbtPsbt :: PartiallySignedTransaction
+    { createPsbtPsbt :: PSBT
     , createPsbtFee :: Word64
     -- ^ Fee in sats the resulting transaction pays
     , createPsbtChangePos :: Int
@@ -2150,7 +2150,7 @@ createFundedPsbt ::
 
 -- | @since 0.3.0.0
 data ProcessPsbtResponse = ProcessPsbtResponse
-    { processPsbtPsbt :: PartiallySignedTransaction
+    { processPsbtPsbt :: PSBT
     -- ^ The partially signed transaction
     , processPsbtComplete :: Bool
     -- ^ If the transaction has a complete set of signatures
