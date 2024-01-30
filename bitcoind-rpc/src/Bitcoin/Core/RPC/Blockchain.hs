@@ -38,6 +38,7 @@ import Data.Aeson (
     (.:?),
  )
 import Data.Aeson.Types (Parser)
+import Data.Int (Int64)
 import Data.Proxy (Proxy (..))
 import Data.Scientific (Scientific)
 import Data.Serialize (Serialize)
@@ -85,7 +86,7 @@ data BlockStats = BlockStats
     , blockStastSegwitWeight :: Word32
     , blockStatsSegwitCount :: Word32
     , blockStatsTime :: UTCTime
-    , blockStatsTotalOut :: Word32
+    , blockStatsTotalOut :: Int64
     , blockStatsTotalSize :: Word32
     , blockStatsTotalWeight :: Word32
     , blockStatsTotalFee :: Word32
