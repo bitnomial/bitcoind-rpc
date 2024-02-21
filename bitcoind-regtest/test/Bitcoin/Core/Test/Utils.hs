@@ -44,7 +44,7 @@ createWallet walletName =
         Nothing
         mempty
         (Just True)
-        Nothing
+        (Just False)
         Nothing
         Nothing
 
