@@ -165,7 +165,7 @@ instance FromJSON BlockHeader where
       where
         parseBlockHash = maybe (fail "Invalid hex in block hash") pure . hexToBlockHash
 
-parseFromHex :: Serialize a => Text -> Parser a
+parseFromHex :: (Serialize a) => Text -> Parser a
 parseFromHex = either fail return . decodeFromHex
 
 data ChainTipStatus = Invalid | HeadersOnly | ValidHeaders | ValidFork | Active

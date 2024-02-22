@@ -47,7 +47,7 @@ import Haskoin.Util (decodeHex, encodeHex)
 partialObject :: [Maybe Pair] -> Value
 partialObject = object . catMaybes
 
-(.=?) :: ToJSON a => Key -> Maybe a -> Maybe Pair
+(.=?) :: (ToJSON a) => Key -> Maybe a -> Maybe Pair
 k .=? mv = (k .=) <$> mv
 
 -- | Helper function for decoding POSIX timestamps
@@ -55,10 +55,10 @@ utcTime :: Word64 -> UTCTime
 utcTime = posixSecondsToUTCTime . fromIntegral
 
 -- | Convert BTC to Satoshis
-toSatoshis :: Integral a => Scientific -> a
+toSatoshis :: (Integral a) => Scientific -> a
 toSatoshis = floor . (* satsPerBTC)
 
-satsPerBTC :: Num a => a
+satsPerBTC :: (Num a) => a
 satsPerBTC = 1_0000_0000
 
 -- | Convert sats to BTC
@@ -70,25 +70,25 @@ rangeToJSON (n, Just m) = toJSON [n, m]
 rangeToJSON (n, _) = toJSON n
 
 -- | Read a serializable from a hex string
-decodeFromHex :: Serialize a => Text -> Either String a
+decodeFromHex :: (Serialize a) => Text -> Either String a
 decodeFromHex = maybe (Left "Invalid hex") Right . decodeHex >=> decode
 
 newtype HexEncoded a = HexEncoded {unHexEncoded :: a} deriving (Eq, Show)
 
-instance Serialize a => FromJSON (HexEncoded a) where
+instance (Serialize a) => FromJSON (HexEncoded a) where
     parseJSON = withText "HexEncoded" $ either fail (return . HexEncoded) . decodeFromHex
 
-instance Serialize a => ToJSON (HexEncoded a) where
+instance (Serialize a) => ToJSON (HexEncoded a) where
     toJSON = toJSON . encodeHex . S.encode . unHexEncoded
 
 newtype Base64Encoded a = Base64Encoded {unBase64Encoded :: a} deriving (Eq, Show)
 
-instance Serialize a => FromJSON (Base64Encoded a) where
+instance (Serialize a) => FromJSON (Base64Encoded a) where
     parseJSON =
         withText "Base64Encoded" $
             either fail (pure . Base64Encoded)
                 . (S.decode <=< first Text.unpack . decodeBase64)
                 . encodeUtf8
 
-instance Serialize a => ToJSON (Base64Encoded a) where
+instance (Serialize a) => ToJSON (Base64Encoded a) where
     toJSON = toJSON . encodeBase64 . S.encode . unBase64Encoded
