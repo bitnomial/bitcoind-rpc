@@ -121,7 +121,7 @@ instance HasDefault EmptyList [a] where getDefault _ = []
 
 data DefZero
 
-instance Num a => HasDefault DefZero a where getDefault _ = 0
+instance (Num a) => HasDefault DefZero a where getDefault _ = 0
 
 class HasBitcoindClient x where
     type TheBitcoindClient x :: Type
@@ -182,7 +182,7 @@ newtype BitcoindClient a = BitcoindClient
     }
     deriving (Functor, Applicative, Monad, MonadIO)
 
-getWalletPath :: Monad m => StateT (Maybe WalletName) m [Text]
+getWalletPath :: (Monad m) => StateT (Maybe WalletName) m [Text]
 getWalletPath = maybe mempty toPath <$> get
   where
     toPath name = ["wallet", name]
@@ -218,7 +218,7 @@ instance Rewrite CX where
             Result{} -> Left $ RpcException "Expecting ack; got result"
 
 -- | Endpoints which simply return a value
-instance FromJSON r => Rewrite (C r) where
+instance (FromJSON r) => Rewrite (C r) where
     type RewriteFrom (C r) = NakedClient
     type RewriteTo (C r) = BitcoindClient r
 
