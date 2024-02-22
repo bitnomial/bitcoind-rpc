@@ -32,7 +32,7 @@ import Bitcoin.Core.RPC (
     withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
-import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v20_1, v21_1)
+import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v20_1, v22_0, v23_0)
 import Bitcoin.Core.Test.Utils (
     bitcoindTest,
     generate,
@@ -66,7 +66,7 @@ testWalletCommands = do
             Nothing
             walletPassword
             (Just True)
-            Nothing
+            (Just False) -- legacy wallet
             Nothing
             Nothing
     liftIO $ RPC.loadWalletName loadWalletR @?= walletName
@@ -251,7 +251,9 @@ testDescriptorCommands v = do
                 Nothing
                 (Just "imported-descriptor")
             ]
-        when (v > v21_1) $ RPC.listDescriptors >>= shouldMatch 6 . length
+        when (v >= v22_0 && v < v23_0) $ RPC.listDescriptors >>= shouldMatch 6 . length
+        -- Newly created descriptor wallets will contain an automatically generated tr() descriptor
+        when (v >= v23_0) $ RPC.listDescriptors >>= shouldMatch 8 . length
   where
     walletName = "descriptorWallet"
     -- Taken from bitcoind descriptor wallet documentation

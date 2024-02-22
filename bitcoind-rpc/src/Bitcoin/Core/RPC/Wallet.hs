@@ -579,7 +579,10 @@ createWallet ::
     -- with privacy considerations in mind.  (Default: False)
     Maybe Bool ->
     -- | Create a native descriptor wallet. The wallet will use descriptors
-    -- internally to handle address creation.  (Default: False)
+    -- internally to handle address creation. Setting to 'False' will create a legacy
+    -- wallet; however, the legacy wallet type is being deprecated and support for
+    -- creating and opening legacy wallets will be removed in the future.  (Default:
+    -- True)
     Maybe Bool ->
     -- | Save wallet name to persistent settings and load on startup. True to
     -- add wallet to startup list, false to remove, null to leave unchanged.

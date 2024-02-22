@@ -317,11 +317,11 @@ data FloodState = FloodState
     }
     deriving (Eq, Show)
 
-pushFloodRoot :: Monad m => FloodRootPoint -> StateT FloodState m ()
+pushFloodRoot :: (Monad m) => FloodRootPoint -> StateT FloodState m ()
 pushFloodRoot rootPoint = modify' $ \floodState ->
     floodState{floodRoots = rootPoint : floodRoots floodState}
 
-flushFloodRoots :: Monad m => Int -> StateT FloodState m [FloodRootPoint]
+flushFloodRoots :: (Monad m) => Int -> StateT FloodState m [FloodRootPoint]
 flushFloodRoots n = do
     (flushedRoots, remainingRoots) <- splitAt n <$> gets floodRoots
     modify' $ \floodState -> floodState{floodRoots = remainingRoots}
@@ -359,7 +359,7 @@ getFloodBalance = gets $ sum . fmap floodAmount . floodRoots
 getBalance :: BitcoindClient Word64
 getBalance = RPC.balanceDetailsTrusted . RPC.balancesMine <$> RPC.getBalances
 
-getSeriesCount :: Monad m => StateT FloodState m Int
+getSeriesCount :: (Monad m) => StateT FloodState m Int
 getSeriesCount = gets $ length . floodSeries
 
 type TxSeries = [Tx]
@@ -383,7 +383,7 @@ buildSeries nOutputs feeRate floodRootPoint =
 flood :: StateT FloodState BitcoindClient [TxHash]
 flood = advance >>= lift . traverse (`RPC.sendTransaction` Nothing)
 
-advance :: Monad m => StateT FloodState m [Tx]
+advance :: (Monad m) => StateT FloodState m [Tx]
 advance = state . asFloodStateUpdate $ peelFirst &&& dropFirst
   where
     peelFirst = mapMaybe (fmap fst . uncons)
@@ -536,7 +536,7 @@ spendEasy ix prevOutput =
 the equal entries using the combining function.
 -}
 zipMerge ::
-    Ord k =>
+    (Ord k) =>
     (a -> b -> c) ->
     (a -> k) ->
     (b -> k) ->

@@ -38,6 +38,7 @@ opts = info (outputOpt <**> helper) $ progDesc "Create a representation of the b
         optional . strOption $
             short 'o' <> long "output" <> help "Omitting this argument outputs to stdout"
 
+-- | Write to stdout or to a file the list and help of available RPC commands by calling bitcoin-cli
 main :: IO ()
 main = do
     outputFile <- execParser opts
