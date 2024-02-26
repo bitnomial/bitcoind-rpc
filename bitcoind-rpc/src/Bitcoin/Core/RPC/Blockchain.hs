@@ -374,8 +374,8 @@ getBlockStats :: BlockHash -> BitcoindClient BlockStats
 getBlockStats h = getBlockStats' h Nothing
 
 {- | Produce the block corresponding to the given 'BlockHash' if it exists. Note
-that a 'DecodingError' will be thrown if the response does not correspond to a
-hex serialized block.
+that this won't work for the Genesis block since to construct a 'BlockHeader' a
+hash to a previous block is necessary.
 -}
 getBlockBlock :: GetBlockResponse -> Block
 getBlockBlock = \case
