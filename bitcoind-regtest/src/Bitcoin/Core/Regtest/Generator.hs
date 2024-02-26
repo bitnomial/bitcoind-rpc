@@ -462,7 +462,7 @@ sweep = do
   where
     onBlockHeight !utxos n = updateUtxoSet utxos <$> getSpentUnspent n
     getSpentUnspent = RPC.getBlockHash >=> fmap onBlock . getBlock
-    getBlock h = RPC.getBlockBlock =<< RPC.getBlock h (Just 0)
+    getBlock h = RPC.getBlockBlock <$> RPC.getBlock h (Just 0)
     onBlock = finalizeBlockDelta . foldl' onTransaction (BlockDelta mempty mempty) . H.blockTxns
     onTransaction delta tx =
         BlockDelta

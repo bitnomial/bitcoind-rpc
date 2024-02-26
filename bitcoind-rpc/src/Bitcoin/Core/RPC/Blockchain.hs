@@ -41,30 +41,29 @@ import Data.Aeson (
     (.:?),
  )
 import Data.Aeson.Types (Parser)
-import Data.Int (Int64)
-import Data.Proxy (Proxy (..))
-import Data.Scientific (Scientific)
-import Data.Serialize (Serialize)
-import Data.Text (Text)
-import Data.Time (NominalDiffTime, UTCTime)
-import Data.Word (Word16, Word32, Word64)
-import Haskoin.Block (Block, BlockHash, BlockHeight, hexToBlockHash)
-import Haskoin.Crypto (Hash256)
-import Haskoin.Transaction (Tx, TxHash)
-import Servant.API ((:<|>) (..))
-
-import Control.Exception (throwIO)
-import Control.Monad.IO.Class (liftIO)
 import Data.Aeson.Utils (
     HexEncoded (unHexEncoded),
     decodeFromHex,
     toSatoshis,
     utcTime,
  )
+import Data.Int (Int64)
+import Data.Maybe (fromMaybe)
+import Data.Proxy (Proxy (..))
+import Data.Scientific (Scientific)
+import Data.Serialize (Serialize)
+import Data.Text (Text)
+import Data.Time (NominalDiffTime, UTCTime)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+import Data.Word (Word16, Word32, Word64)
+import Haskoin.Block (Block (..), BlockHash, BlockHeight, hexToBlockHash)
+import qualified Haskoin.Block as Haskoin
+import Haskoin.Crypto (Hash256)
+import Haskoin.Transaction (Tx, TxHash)
+import Servant.API ((:<|>) (..))
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
-    BitcoindException (..),
     C,
     DefFalse,
     DefTrue,
@@ -283,6 +282,7 @@ data GetBlockV2Response = GetBlockV2Response
     , getBlockV2NextBlockHash :: Maybe BlockHash
     , getBlockV2MerkleRoot :: Hash256
     , getBlockV2Time :: UTCTime
+    , getBlockV2Bits :: Word32
     , getBlockV2Nonce :: Word32
     , getBlockV2Txs :: [(TxHash, Tx, Maybe Word64)]
     -- ^ Includes coinbase transaction which does not have a fee
@@ -300,6 +300,7 @@ instance FromJSON GetBlockV2Response where
             <*> o .: "nextblockhash"
             <*> (o .: "merkleroot" >>= parseFromHex)
             <*> (utcTime <$> o .: "time")
+            <*> (unHexEncoded <$> o .: "bits")
             <*> o .: "nonce"
             <*> (mapM parseTxAndFee =<< (o .: "tx"))
       where
@@ -376,11 +377,20 @@ getBlockStats h = getBlockStats' h Nothing
 that a 'DecodingError' will be thrown if the response does not correspond to a
 hex serialized block.
 -}
-getBlockBlock :: GetBlockResponse -> BitcoindClient Block
+getBlockBlock :: GetBlockResponse -> Block
 getBlockBlock = \case
-    GetBlockV0 block -> pure block
-    GetBlockV2 _ ->
-        liftIO . throwIO $
-            DecodingError
-                "GetBlockResponse does not result in a serialized Block, \
-                \check the verbosity value was set to 0 when making the request."
+    GetBlockV0 block -> block
+    GetBlockV2 response ->
+        Block
+            ( Haskoin.BlockHeader
+                { Haskoin.blockVersion = getBlockV2Version response
+                , Haskoin.merkleRoot = getBlockV2MerkleRoot response
+                , Haskoin.blockBits = getBlockV2Bits response
+                , Haskoin.bhNonce = getBlockV2Nonce response
+                , Haskoin.blockTimestamp = round . utcTimeToPOSIXSeconds $ getBlockV2Time response
+                , Haskoin.prevBlock =
+                    fromMaybe (error "no previous block hash on genesis") $
+                        getBlockV2PreviousBlockHash response
+                }
+            )
+            ((\(_, tx, _) -> tx) <$> getBlockV2Txs response)
