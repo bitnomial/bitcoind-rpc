@@ -9,7 +9,6 @@
 module Bitcoin.Core.RPC.Blockchain (
     getBestBlockHash,
     getBlock,
-    getBlock',
     getBlockBlock,
     getBlockCount,
     getBlockHash,
@@ -51,7 +50,7 @@ import Data.Time (NominalDiffTime, UTCTime)
 import Data.Word (Word16, Word32, Word64)
 import Haskoin.Block (Block, BlockHash, BlockHeight, hexToBlockHash)
 import Haskoin.Crypto (Hash256)
-import Haskoin.Transaction (TxHash)
+import Haskoin.Transaction (Tx, TxHash)
 import Servant.API ((:<|>) (..))
 
 import Control.Exception (throwIO)
@@ -285,7 +284,7 @@ data GetBlockV2Response = GetBlockV2Response
     , getBlockV2MerkleRoot :: Hash256
     , getBlockV2Time :: UTCTime
     , getBlockV2Nonce :: Word32
-    , getBlockV2Txs :: [(TxHash, Maybe Word64)]
+    , getBlockV2Txs :: [(TxHash, Tx, Maybe Word64)]
     -- ^ Includes coinbase transaction which does not have a fee
     }
     deriving (Eq, Show)
@@ -305,7 +304,10 @@ instance FromJSON GetBlockV2Response where
             <*> (mapM parseTxAndFee =<< (o .: "tx"))
       where
         parseTxAndFee = withObject "GetBlockV2Response.tx" $ \o ->
-            (,) <$> o .: "txid" <*> (fmap toSatoshis <$> o .:? "fee")
+            (,,)
+                <$> o .: "txid"
+                <*> (unHexEncoded <$> o .: "hex")
+                <*> (fmap toSatoshis <$> o .:? "fee")
 
 {- | Returns a block. If verbosity is 0, returns a 'Block' decoded from the
 underlying hex-encoded data. If verbosity is 2, returns an object with
@@ -370,15 +372,15 @@ getBestBlockHash
 getBlockStats :: BlockHash -> BitcoindClient BlockStats
 getBlockStats h = getBlockStats' h Nothing
 
--- | Produce the block corresponding to the given 'BlockHash' if it exists.
-getBlockBlock :: GetBlockResponse -> Either BitcoindException Block
+{- | Produce the block corresponding to the given 'BlockHash' if it exists. Note
+that a 'DecodingError' will be thrown if the response does not correspond to a
+hex serialized block.
+-}
+getBlockBlock :: GetBlockResponse -> BitcoindClient Block
 getBlockBlock = \case
-    GetBlockV0 block -> Right block
+    GetBlockV0 block -> pure block
     GetBlockV2 _ ->
-        Left $
+        liftIO . throwIO $
             DecodingError
                 "GetBlockResponse does not result in a serialized Block, \
                 \check the verbosity value was set to 0 when making the request."
-
-getBlock' :: BlockHash -> BitcoindClient Block
-getBlock' h = either (liftIO . throwIO) pure . getBlockBlock =<< getBlock h (Just 0)

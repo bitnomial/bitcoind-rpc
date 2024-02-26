@@ -81,6 +81,8 @@ Just addrText = addrToText btcTest addr
 
 testBlock :: BitcoindClient Block
 testBlock = getBestBlockHash >>= getBlock'
+  where
+    getBlock' h = getBlockBlock =<< getBlock h (Just 0)
 
 testBlockFilter :: BitcoindClient CompactFilter
 testBlockFilter = getBestBlockHash >>= getBlockFilter
@@ -94,6 +96,8 @@ testBlockStats = getBestBlockHash >>= getBlockStats
 testGetTransaction :: BitcoindClient Tx
 testGetTransaction =
     getBestBlockHash >>= getBlock' >>= (`getRawTransaction` Nothing) . txHash . head . blockTxns
+  where
+    getBlock' h = getBlockBlock =<< getBlock h (Just 0)
 
 testSendTransaction :: BitcoindClient TxHash
 testSendTransaction = do
