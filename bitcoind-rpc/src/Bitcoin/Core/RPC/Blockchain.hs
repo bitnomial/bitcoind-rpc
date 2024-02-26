@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -8,6 +9,8 @@
 module Bitcoin.Core.RPC.Blockchain (
     getBestBlockHash,
     getBlock,
+    getBlock',
+    getBlockBlock,
     getBlockCount,
     getBlockHash,
     CompactFilter (..),
@@ -32,6 +35,7 @@ module Bitcoin.Core.RPC.Blockchain (
 import Bitcoin.CompactFilter (BlockFilter, BlockFilterHeader)
 import Data.Aeson (
     FromJSON (..),
+    Value (String),
     withObject,
     withText,
     (.:),
@@ -50,6 +54,8 @@ import Haskoin.Crypto (Hash256)
 import Haskoin.Transaction (TxHash)
 import Servant.API ((:<|>) (..))
 
+import Control.Exception (throwIO)
+import Control.Monad.IO.Class (liftIO)
 import Data.Aeson.Utils (
     HexEncoded (unHexEncoded),
     decodeFromHex,
@@ -59,10 +65,10 @@ import Data.Aeson.Utils (
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
+    BitcoindException (..),
     C,
     DefFalse,
     DefTrue,
-    DefZero,
     F,
     I,
     O,
@@ -242,7 +248,7 @@ instance FromJSON MempoolInfo where
 
 type BlockchainRpc =
     BitcoindEndpoint "getbestblockhash" (C BlockHash)
-        :<|> BitcoindEndpoint "getblock" (I BlockHash -> F DefZero Int -> C (HexEncoded Block))
+        :<|> BitcoindEndpoint "getblock" (I BlockHash -> O Int -> C GetBlockResponse)
         :<|> BitcoindEndpoint "getblockcount" (C Word32)
         :<|> BitcoindEndpoint "getblockfilter" (I BlockHash -> C CompactFilter)
         :<|> BitcoindEndpoint "getblockhash" (I BlockHeight -> C BlockHash)
@@ -258,7 +264,54 @@ type BlockchainRpc =
 
 -- | Returns the hash of the best (tip) block in the most-work fully-validated chain.
 getBestBlockHash :: BitcoindClient BlockHash
-getBlock' :: BlockHash -> BitcoindClient (HexEncoded Block)
+
+-- TODO add support for other verbosity values
+data GetBlockResponse
+    = GetBlockV0 Block
+    | GetBlockV2 GetBlockV2Response
+    deriving (Eq, Show)
+
+instance FromJSON GetBlockResponse where
+    parseJSON v@(String _) = GetBlockV0 . unHexEncoded <$> parseJSON v
+    parseJSON v = GetBlockV2 <$> parseJSON v
+
+data GetBlockV2Response = GetBlockV2Response
+    { getBlockV2Hash :: BlockHash
+    , getBlockV2Confirmations :: Int
+    , getBlockV2Height :: BlockHeight
+    , getBlockV2Version :: Word32
+    , getBlockV2PreviousBlockHash :: Maybe BlockHash
+    , getBlockV2NextBlockHash :: Maybe BlockHash
+    , getBlockV2MerkleRoot :: Hash256
+    , getBlockV2Time :: UTCTime
+    , getBlockV2Nonce :: Word32
+    , getBlockV2Txs :: [(TxHash, Maybe Word64)]
+    -- ^ Includes coinbase transaction which does not have a fee
+    }
+    deriving (Eq, Show)
+
+instance FromJSON GetBlockV2Response where
+    parseJSON = withObject "GetBlockV2Response" $ \o -> do
+        GetBlockV2Response
+            <$> o .: "hash"
+            <*> o .: "confirmations"
+            <*> o .: "height"
+            <*> o .: "version"
+            <*> o .: "previousblockhash"
+            <*> o .: "nextblockhash"
+            <*> (o .: "merkleroot" >>= parseFromHex)
+            <*> (utcTime <$> o .: "time")
+            <*> o .: "nonce"
+            <*> (mapM parseTxAndFee =<< (o .: "tx"))
+      where
+        parseTxAndFee = withObject "GetBlockV2Response.tx" $ \o ->
+            (,) <$> o .: "txid" <*> (fmap toSatoshis <$> o .:? "fee")
+
+{- | Returns a block. If verbosity is 0, returns a 'Block' decoded from the
+underlying hex-encoded data. If verbosity is 2, returns an object with
+information about block and information about each transaction.
+-}
+getBlock :: BlockHash -> Maybe Int -> BitcoindClient GetBlockResponse
 
 -- | Returns the height of the most-work fully-validated chain.  The genesis block has height 0.
 getBlockCount :: BitcoindClient Word32
@@ -296,7 +349,7 @@ getMempoolInfo :: BitcoindClient MempoolInfo
 -- | Returns all transaction ids in memory pool.
 getRawMempool :: BitcoindClient [TxHash]
 getBestBlockHash
-    :<|> getBlock'
+    :<|> getBlock
     :<|> getBlockCount
     :<|> getBlockFilter
     :<|> getBlockHash
@@ -318,5 +371,14 @@ getBlockStats :: BlockHash -> BitcoindClient BlockStats
 getBlockStats h = getBlockStats' h Nothing
 
 -- | Produce the block corresponding to the given 'BlockHash' if it exists.
-getBlock :: BlockHash -> BitcoindClient Block
-getBlock = fmap unHexEncoded . getBlock'
+getBlockBlock :: GetBlockResponse -> Either BitcoindException Block
+getBlockBlock = \case
+    GetBlockV0 block -> Right block
+    GetBlockV2 _ ->
+        Left $
+            DecodingError
+                "GetBlockResponse does not result in a serialized Block, \
+                \check the verbosity value was set to 0 when making the request."
+
+getBlock' :: BlockHash -> BitcoindClient Block
+getBlock' h = either (liftIO . throwIO) pure . getBlockBlock =<< getBlock h (Just 0)

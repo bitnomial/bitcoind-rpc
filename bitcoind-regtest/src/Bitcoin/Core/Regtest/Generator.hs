@@ -461,7 +461,7 @@ sweep = do
     fmap toFloodRootPoint . Set.toList <$> foldM onBlockHeight mempty [0 .. currentHeight]
   where
     onBlockHeight !utxos n = updateUtxoSet utxos <$> getSpentUnspent n
-    getSpentUnspent = RPC.getBlockHash >=> fmap onBlock . RPC.getBlock
+    getSpentUnspent = RPC.getBlockHash >=> fmap onBlock . RPC.getBlock'
     onBlock = finalizeBlockDelta . foldl' onTransaction (BlockDelta mempty mempty) . H.blockTxns
     onTransaction delta tx =
         BlockDelta

@@ -291,7 +291,7 @@ generateEnoughBlocks vTarget = go ([], 0, 0 :: Int)
 generate :: BitcoindClient (OutPoint, Word64)
 generate =
     fmap (processCoinbase . head . blockTxns) $
-        RPC.generateToAddress 1 textAddr0 Nothing >>= RPC.getBlock . head
+        RPC.generateToAddress 1 textAddr0 Nothing >>= RPC.getBlock' . head
 
 processCoinbase :: Tx -> (OutPoint, Word64)
 processCoinbase tx0 = (OutPoint (txHash tx0) 0, outValue . head $ txOut tx0)
