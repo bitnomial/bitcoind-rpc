@@ -38,6 +38,7 @@ module Bitcoin.Core.RPC (
     getBlock,
     getBlockFilter,
     getBlockHeader,
+    getBlockBlock,
     getBlockHash,
     getBlockCount,
     getDifficulty,

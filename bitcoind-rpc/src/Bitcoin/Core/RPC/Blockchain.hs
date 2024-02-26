@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -8,6 +9,7 @@
 module Bitcoin.Core.RPC.Blockchain (
     getBestBlockHash,
     getBlock,
+    getBlockBlock,
     getBlockCount,
     getBlockHash,
     CompactFilter (..),
@@ -32,37 +34,39 @@ module Bitcoin.Core.RPC.Blockchain (
 import Bitcoin.CompactFilter (BlockFilter, BlockFilterHeader)
 import Data.Aeson (
     FromJSON (..),
+    Value (String),
     withObject,
     withText,
     (.:),
     (.:?),
  )
 import Data.Aeson.Types (Parser)
-import Data.Int (Int64)
-import Data.Proxy (Proxy (..))
-import Data.Scientific (Scientific)
-import Data.Serialize (Serialize)
-import Data.Text (Text)
-import Data.Time (NominalDiffTime, UTCTime)
-import Data.Word (Word16, Word32, Word64)
-import Haskoin.Block (Block, BlockHash, BlockHeight, hexToBlockHash)
-import Haskoin.Crypto (Hash256)
-import Haskoin.Transaction (TxHash)
-import Servant.API ((:<|>) (..))
-
 import Data.Aeson.Utils (
     HexEncoded (unHexEncoded),
     decodeFromHex,
     toSatoshis,
     utcTime,
  )
+import Data.Int (Int64)
+import Data.Maybe (fromMaybe)
+import Data.Proxy (Proxy (..))
+import Data.Scientific (Scientific)
+import Data.Serialize (Serialize)
+import Data.Text (Text)
+import Data.Time (NominalDiffTime, UTCTime)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+import Data.Word (Word16, Word32, Word64)
+import qualified Haskoin as H
+import Haskoin.Block (Block (..), BlockHash, BlockHeight, hexToBlockHash)
+import Haskoin.Crypto (Hash256)
+import Haskoin.Transaction (Tx, TxHash)
+import Servant.API ((:<|>) (..))
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
     C,
     DefFalse,
     DefTrue,
-    DefZero,
     F,
     I,
     O,
@@ -242,7 +246,7 @@ instance FromJSON MempoolInfo where
 
 type BlockchainRpc =
     BitcoindEndpoint "getbestblockhash" (C BlockHash)
-        :<|> BitcoindEndpoint "getblock" (I BlockHash -> F DefZero Int -> C (HexEncoded Block))
+        :<|> BitcoindEndpoint "getblock" (I BlockHash -> O Int -> C GetBlockResponse)
         :<|> BitcoindEndpoint "getblockcount" (C Word32)
         :<|> BitcoindEndpoint "getblockfilter" (I BlockHash -> C CompactFilter)
         :<|> BitcoindEndpoint "getblockhash" (I BlockHeight -> C BlockHash)
@@ -258,7 +262,59 @@ type BlockchainRpc =
 
 -- | Returns the hash of the best (tip) block in the most-work fully-validated chain.
 getBestBlockHash :: BitcoindClient BlockHash
-getBlock' :: BlockHash -> BitcoindClient (HexEncoded Block)
+
+-- TODO add support for other verbosity values
+data GetBlockResponse
+    = GetBlockV0 Block
+    | GetBlockV2 GetBlockV2Response
+    deriving (Eq, Show)
+
+instance FromJSON GetBlockResponse where
+    parseJSON v@(String _) = GetBlockV0 . unHexEncoded <$> parseJSON v
+    parseJSON v = GetBlockV2 <$> parseJSON v
+
+data GetBlockV2Response = GetBlockV2Response
+    { getBlockV2Hash :: BlockHash
+    , getBlockV2Confirmations :: Int
+    , getBlockV2Height :: BlockHeight
+    , getBlockV2Version :: Word32
+    , getBlockV2PreviousBlockHash :: Maybe BlockHash
+    , getBlockV2NextBlockHash :: Maybe BlockHash
+    , getBlockV2MerkleRoot :: Hash256
+    , getBlockV2Time :: UTCTime
+    , getBlockV2Bits :: Word32
+    , getBlockV2Nonce :: Word32
+    , getBlockV2Txs :: [(TxHash, Tx, Maybe Word64)]
+    -- ^ Includes coinbase transaction which does not have a fee
+    }
+    deriving (Eq, Show)
+
+instance FromJSON GetBlockV2Response where
+    parseJSON = withObject "GetBlockV2Response" $ \o -> do
+        GetBlockV2Response
+            <$> o .: "hash"
+            <*> o .: "confirmations"
+            <*> o .: "height"
+            <*> o .: "version"
+            <*> o .: "previousblockhash"
+            <*> o .: "nextblockhash"
+            <*> (o .: "merkleroot" >>= parseFromHex)
+            <*> (utcTime <$> o .: "time")
+            <*> (unHexEncoded <$> o .: "bits")
+            <*> o .: "nonce"
+            <*> (mapM parseTxAndFee =<< (o .: "tx"))
+      where
+        parseTxAndFee = withObject "GetBlockV2Response.tx" $ \o ->
+            (,,)
+                <$> o .: "txid"
+                <*> (unHexEncoded <$> o .: "hex")
+                <*> (fmap toSatoshis <$> o .:? "fee")
+
+{- | Returns a block. If verbosity is 0, returns a 'Block' decoded from the
+underlying hex-encoded data. If verbosity is 2, returns an object with
+information about block and information about each transaction.
+-}
+getBlock :: BlockHash -> Maybe Int -> BitcoindClient GetBlockResponse
 
 -- | Returns the height of the most-work fully-validated chain.  The genesis block has height 0.
 getBlockCount :: BitcoindClient Word32
@@ -296,7 +352,7 @@ getMempoolInfo :: BitcoindClient MempoolInfo
 -- | Returns all transaction ids in memory pool.
 getRawMempool :: BitcoindClient [TxHash]
 getBestBlockHash
-    :<|> getBlock'
+    :<|> getBlock
     :<|> getBlockCount
     :<|> getBlockFilter
     :<|> getBlockHash
@@ -317,6 +373,24 @@ getBestBlockHash
 getBlockStats :: BlockHash -> BitcoindClient BlockStats
 getBlockStats h = getBlockStats' h Nothing
 
--- | Produce the block corresponding to the given 'BlockHash' if it exists.
-getBlock :: BlockHash -> BitcoindClient Block
-getBlock = fmap unHexEncoded . getBlock'
+{- | Produce the block corresponding to the given 'BlockHash' if it exists. Note
+that this won't work for the Genesis block since to construct a 'BlockHeader' a
+hash to a previous block is necessary.
+-}
+getBlockBlock :: GetBlockResponse -> Block
+getBlockBlock = \case
+    GetBlockV0 block -> block
+    GetBlockV2 response ->
+        Block
+            ( H.BlockHeader
+                { H.blockVersion = getBlockV2Version response
+                , H.merkleRoot = getBlockV2MerkleRoot response
+                , H.blockBits = getBlockV2Bits response
+                , H.bhNonce = getBlockV2Nonce response
+                , H.blockTimestamp = round . utcTimeToPOSIXSeconds $ getBlockV2Time response
+                , H.prevBlock =
+                    fromMaybe (error "no previous block hash on genesis") $
+                        getBlockV2PreviousBlockHash response
+                }
+            )
+            ((\(_, tx, _) -> tx) <$> getBlockV2Txs response)
