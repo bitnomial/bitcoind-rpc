@@ -16,6 +16,8 @@ module Bitcoin.Core.RPC.Responses (
     ChainTip (..),
     ChainTipStatus (..),
     ChainTxStats (..),
+    GetBlockResponse (..),
+    GetBlockV2Response (..),
 
     -- * Mempool
     MempoolInfo (..),
