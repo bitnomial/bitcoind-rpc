@@ -12,6 +12,9 @@ module Bitcoin.Core.RPC.Blockchain (
     getBlockBlock,
     getBlockCount,
     getBlockHash,
+    getBlockResponse,
+    GetBlockResponse (..),
+    GetBlockV2Response (..),
     CompactFilter (..),
     getBlockFilter,
     BlockHeader (..),
@@ -310,6 +313,12 @@ instance FromJSON GetBlockV2Response where
                 <*> (unHexEncoded <$> o .: "hex")
                 <*> (fmap toSatoshis <$> o .:? "fee")
 
+-- | Eliminator for the 'GetblockResponse'
+getBlockResponse :: (Block -> a) -> (GetBlockV2Response -> a) -> GetBlockResponse -> a
+getBlockResponse f g = \case
+    GetBlockV0 block -> f block
+    GetBlockV2 response -> g response
+
 {- | Returns a block. If verbosity is 0, returns a 'Block' decoded from the
 underlying hex-encoded data. If verbosity is 2, returns an object with
 information about block and information about each transaction.
@@ -378,9 +387,9 @@ that this won't work for the Genesis block since to construct a 'BlockHeader' a
 hash to a previous block is necessary.
 -}
 getBlockBlock :: GetBlockResponse -> Block
-getBlockBlock = \case
-    GetBlockV0 block -> block
-    GetBlockV2 response ->
+getBlockBlock = getBlockResponse id responseToBlock
+  where
+    responseToBlock response =
         Block
             ( H.BlockHeader
                 { H.blockVersion = getBlockV2Version response
