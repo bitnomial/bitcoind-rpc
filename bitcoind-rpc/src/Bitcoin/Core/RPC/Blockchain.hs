@@ -21,6 +21,7 @@ module Bitcoin.Core.RPC.Blockchain (
     getBlockHeader,
     BlockStats (..),
     getBlockStats,
+    getBlockStats',
     ChainTip (..),
     ChainTipStatus (..),
     getChainTips,
@@ -77,58 +78,58 @@ import Servant.Bitcoind (
  )
 
 data BlockStats = BlockStats
-    { blockStatsAvgFee :: Double
-    , blockStatsAvgFeeRate :: Word32
-    , blockStatsAvgTxSize :: Word32
-    , blockStatsBlockHash :: BlockHash
-    , blockStatsFeeRatePercentiles :: [Word32]
-    , blockStatsHeight :: BlockHeight
-    , blockStatsIns :: Word32
-    , blockStatsMaxFee :: Word32
-    , blockStatsMaxFeeRate :: Word32
-    , blockStatsMinTxSize :: Word32
-    , blockStatsOuts :: Word32
-    , blockStatsSubsidy :: Word64
-    , blockStatsSegwitSize :: Word32
-    , blockStastSegwitWeight :: Word32
-    , blockStatsSegwitCount :: Word32
-    , blockStatsTime :: UTCTime
-    , blockStatsTotalOut :: Int64
-    , blockStatsTotalSize :: Word32
-    , blockStatsTotalWeight :: Word32
-    , blockStatsTotalFee :: Word32
-    , blockStatsCount :: Word32
-    , blockStatsUtxoIncrease :: Int
-    , blockStatsUtxoSizeIncrease :: Int
+    { blockStatsAvgFee :: Maybe Double
+    , blockStatsAvgFeeRate :: Maybe Word32
+    , blockStatsAvgTxSize :: Maybe Word32
+    , blockStatsBlockHash :: Maybe BlockHash
+    , blockStatsFeeRatePercentiles :: Maybe [Word32]
+    , blockStatsHeight :: Maybe BlockHeight
+    , blockStatsIns :: Maybe Word32
+    , blockStatsMaxFee :: Maybe Word32
+    , blockStatsMaxFeeRate :: Maybe Word32
+    , blockStatsMinTxSize :: Maybe Word32
+    , blockStatsOuts :: Maybe Word32
+    , blockStatsSubsidy :: Maybe Word64
+    , blockStatsSegwitSize :: Maybe Word32
+    , blockStastSegwitWeight :: Maybe Word32
+    , blockStatsSegwitCount :: Maybe Word32
+    , blockStatsTime :: Maybe UTCTime
+    , blockStatsTotalOut :: Maybe Int64
+    , blockStatsTotalSize :: Maybe Word32
+    , blockStatsTotalWeight :: Maybe Word32
+    , blockStatsTotalFee :: Maybe Word32
+    , blockStatsCount :: Maybe Word32
+    , blockStatsUtxoIncrease :: Maybe Int
+    , blockStatsUtxoSizeIncrease :: Maybe Int
     }
     deriving (Eq, Show)
 
 instance FromJSON BlockStats where
     parseJSON = withObject "BlockStats" $ \o ->
         BlockStats
-            <$> o .: "avgfee"
-            <*> o .: "avgfeerate"
-            <*> o .: "avgtxsize"
-            <*> o .: "blockhash"
-            <*> o .: "feerate_percentiles"
-            <*> o .: "height"
-            <*> o .: "ins"
-            <*> o .: "maxfee"
-            <*> o .: "maxfeerate"
-            <*> o .: "mintxsize"
-            <*> o .: "outs"
-            <*> o .: "subsidy"
-            <*> o .: "swtotal_size"
-            <*> o .: "swtotal_weight"
-            <*> o .: "swtxs"
-            <*> (utcTime <$> o .: "time")
-            <*> o .: "total_out"
-            <*> o .: "total_size"
-            <*> o .: "total_weight"
-            <*> o .: "totalfee"
-            <*> o .: "txs"
-            <*> o .: "utxo_increase"
-            <*> o .: "utxo_size_inc"
+            <$> o .:? "avgfee"
+            <*> o .:? "avgfeerate"
+            <*> o .:? "avgtxsize"
+            <*> o .:? "blockhash"
+            <*> o .:? "feerate_percentiles"
+            <*> o .:? "height"
+            <*> o .:? "ins"
+            <*> o .:? "maxfee"
+            <*> o .:? "maxfeerate"
+            <*> o .:? "mintxsize"
+            <*> o .:? "outs"
+            <*> o .:? "subsidy"
+            <*> o .:? "swtotal_size"
+            <*> o .:? "swtotal_weight"
+            <*> o .:? "swtxs"
+            <*> (fmap utcTime <$> o .:? "time")
+            <*> o .:? "total_out"
+            <*> o .:? "total_size"
+            <*> o .:? "total_weight"
+            <*> o .:? "totalfee"
+            <*> o .:? "txs"
+            <*> o .:? "utxo_increase"
+            <*> o .:? "utxo_size_inc"
 
 data CompactFilter = CompactFilter
     { filterHeader :: BlockFilterHeader
