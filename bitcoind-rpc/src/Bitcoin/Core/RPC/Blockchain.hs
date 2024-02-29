@@ -85,7 +85,7 @@ data BlockStats = BlockStats
     , blockStatsFeeRatePercentiles :: Maybe [Word32]
     , blockStatsHeight :: Maybe BlockHeight
     , blockStatsIns :: Maybe Word32
-    , blockStatsMaxFee :: Maybe Word32
+    , blockStatsMaxFee :: Maybe Word64
     , blockStatsMaxFeeRate :: Maybe Word32
     , blockStatsMinTxSize :: Maybe Word32
     , blockStatsOuts :: Maybe Word32
@@ -97,7 +97,7 @@ data BlockStats = BlockStats
     , blockStatsTotalOut :: Maybe Int64
     , blockStatsTotalSize :: Maybe Word32
     , blockStatsTotalWeight :: Maybe Word32
-    , blockStatsTotalFee :: Maybe Word32
+    , blockStatsTotalFee :: Maybe Word64
     , blockStatsCount :: Maybe Word32
     , blockStatsUtxoIncrease :: Maybe Int
     , blockStatsUtxoSizeIncrease :: Maybe Int
