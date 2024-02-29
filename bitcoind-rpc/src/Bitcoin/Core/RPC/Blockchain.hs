@@ -21,7 +21,6 @@ module Bitcoin.Core.RPC.Blockchain (
     getBlockHeader,
     BlockStats (..),
     getBlockStats,
-    getBlockStats',
     ChainTip (..),
     ChainTipStatus (..),
     getChainTips,
@@ -155,6 +154,7 @@ data BlockHeader = BlockHeader
     , blockHeaderPrevHash :: Maybe BlockHash
     , blockHeaderNextHash :: Maybe BlockHash
     }
+    deriving (Eq, Show)
 
 instance FromJSON BlockHeader where
     parseJSON = withObject "BlockHeader" $ \o ->
@@ -337,7 +337,11 @@ getBlockFilter :: BlockHash -> BitcoindClient CompactFilter
 
 -- | Returns the header of the block corresponding to the given 'BlockHash'
 getBlockHeader :: BlockHash -> BitcoindClient BlockHeader
-getBlockStats' :: BlockHash -> Maybe [Text] -> BitcoindClient BlockStats
+
+{- | Compute per block statistics for a given window. All amounts are in
+ satoshis.  It won't work for some heights with pruning.
+-}
+getBlockStats :: BlockHash -> Maybe [Text] -> BitcoindClient BlockStats
 
 {- | Return information about all known tips in the block tree, including the
  main chain as well as orphaned branches.
@@ -367,7 +371,7 @@ getBestBlockHash
     :<|> getBlockFilter
     :<|> getBlockHash
     :<|> getBlockHeader
-    :<|> getBlockStats'
+    :<|> getBlockStats
     :<|> getChainTips
     :<|> getChainTxStats
     :<|> getDifficulty
@@ -376,12 +380,6 @@ getBestBlockHash
     :<|> getMempoolInfo
     :<|> getRawMempool =
         toBitcoindClient $ Proxy @BlockchainRpc
-
-{- | Compute per block statistics for a given window. All amounts are in
- satoshis.  It won't work for some heights with pruning.
--}
-getBlockStats :: BlockHash -> BitcoindClient BlockStats
-getBlockStats h = getBlockStats' h Nothing
 
 {- | Produce the block corresponding to the given 'BlockHash' if it exists. Note
 that this won't work for the Genesis block since to construct a 'BlockHeader' a

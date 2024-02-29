@@ -91,7 +91,7 @@ testBlockHeader :: BitcoindClient BlockHeader
 testBlockHeader = getBestBlockHash >>= getBlockHeader
 
 testBlockStats :: BitcoindClient BlockStats
-testBlockStats = getBestBlockHash >>= getBlockStats
+testBlockStats = getBestBlockHash >>= \h -> getBlockStats h Nothing
 
 testGetTransaction :: BitcoindClient Tx
 testGetTransaction =
