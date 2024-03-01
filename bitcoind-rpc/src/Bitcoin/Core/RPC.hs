@@ -44,6 +44,7 @@ module Bitcoin.Core.RPC (
     getBlockCount,
     getDifficulty,
     getBestBlockHash,
+    BlockStat (..),
     getBlockStats,
     getChainTips,
     getChainTxStats,
