@@ -84,96 +84,96 @@ These are labels for the statistics accepted in the 'getblockstat' RPC command.
 -}
 data BlockStat
     = -- | Selects the average fee in the block statistic
-      AvgFee
+      StatAvgFee
     | -- | Selects the average feerate (in satoshis per virtual byte) statistic
-      AvgFeeRate
+      StatAvgFeeRate
     | -- | Selects the average transaction size statistic
-      AvgTxSize
+      StatAvgTxSize
     | -- | Selects the block hash (to check for potential reorgs)
-      BlockHash
+      StatBlockHash
     | -- | Selects feerates statistics at the 10th, 25th, 50th, 75th, and 90th percentile weight unit (in satoshis per virtual byte)
-      FeeRatePercentiles
+      StatFeeRatePercentiles
     | -- | Selects the height of the block
-      Height
+      StatHeight
     | -- | Selects the number of inputs (excluding coinbase) statistic
-      Inputs
+      StatInputs
     | -- | Selects the maximum fee in the block statistic
-      MaxFee
+      StatMaxFee
     | -- | Selects the maximum feerate (in satoshis per virtual byte) statistic
-      MaxFeeRate
+      StatMaxFeeRate
     | -- | Selects the maximum transaction size statistic
-      MaxTxSize
+      StatMaxTxSize
     | -- | Selects the truncated median fee in the block statistic
-      MedianFee
+      StatMedianFee
     | -- | Selects the block median time past statistic
-      MedianTime
+      StatMedianTime
     | -- | Selects the truncated median transaction size statistic
-      MedianTxSize
+      StatMedianTxSize
     | -- | Selects the minimum fee in the block statistic
-      MinFee
+      StatMinFee
     | -- | Selects the minimum feerate (in satoshis per virtual byte) statistic
-      MinFeeRate
+      StatMinFeeRate
     | -- | Selects the minimum transaction size statistic
-      MinTxSize
+      StatMinTxSize
     | -- | Selects the number of outputs statistic
-      Outputs
+      StatOutputs
     | -- | Selects the block subsidy
-      Subsidy
+      StatSubsidy
     | -- | Selects the total size of all segwit transactions statistic
-      SegwitTotalSize
+      StatSegwitTotalSize
     | -- | Selects the total weight of all segwit transactions statistic
-      SegwitTotalWeight
+      StatSegwitTotalWeight
     | -- | Selects the number of segwit transactions statistic
-      SegwitTxs
+      StatSegwitTxs
     | -- | Selects the block time
-      Time
+      StatTime
     | -- | Selects the total amount in all outputs (excluding coinbase and thus reward [ie subsidy + totalfee]) statistic
-      TotalOut
+      StatTotalOut
     | -- | Selects the total size of all non-coinbase transactions statistic
-      TotalSize
+      StatTotalSize
     | -- | Selects the total weight of all non-coinbase transactions statistic
-      TotalWeight
+      StatTotalWeight
     | -- | Selects the fee total statistic
-      TotalFee
+      StatTotalFee
     | -- | Selects the number of transactions (including coinbase) statistic
-      Txs
+      StatTxs
     | -- | Selects the increase/decrease in the number of unspent outputs statistic
-      UtxoIncrease
+      StatUtxoIncrease
     | -- | Selects the increase/decrease in size for the utxo index (not discounting op_return and similar) statistic
-      UtxoSizeIncrease
+      StatUtxoSizeIncrease
     deriving (Eq, Show)
 
 instance ToJSON BlockStat where
     toJSON = \case
-        AvgFee -> "avgfee"
-        AvgFeeRate -> "avgfeerate"
-        AvgTxSize -> "avgtxsize"
-        BlockHash -> "blockhash"
-        FeeRatePercentiles -> "feerate_percentiles"
-        Height -> "height"
-        Inputs -> "ins"
-        MaxFee -> "maxfee"
-        MaxFeeRate -> "maxfeerate"
-        MaxTxSize -> "maxtxsize"
-        MedianFee -> "medianfee"
-        MedianTime -> "mediantime"
-        MedianTxSize -> "mediantxsize"
-        MinFee -> "minfee"
-        MinFeeRate -> "minfeerate"
-        MinTxSize -> "mintxsize"
-        Outputs -> "outs"
-        Subsidy -> "subsidy"
-        SegwitTotalSize -> "swtotal_size"
-        SegwitTotalWeight -> "swtotal_weight"
-        SegwitTxs -> "swtxs"
-        Time -> "time"
-        TotalOut -> "total_out"
-        TotalSize -> "total_size"
-        TotalWeight -> "total_weight"
-        TotalFee -> "totalfee"
-        Txs -> "txs"
-        UtxoIncrease -> "utxo_increase"
-        UtxoSizeIncrease -> "utxo_size_inc"
+        StatAvgFee -> "avgfee"
+        StatAvgFeeRate -> "avgfeerate"
+        StatAvgTxSize -> "avgtxsize"
+        StatBlockHash -> "blockhash"
+        StatFeeRatePercentiles -> "feerate_percentiles"
+        StatHeight -> "height"
+        StatInputs -> "ins"
+        StatMaxFee -> "maxfee"
+        StatMaxFeeRate -> "maxfeerate"
+        StatMaxTxSize -> "maxtxsize"
+        StatMedianFee -> "medianfee"
+        StatMedianTime -> "mediantime"
+        StatMedianTxSize -> "mediantxsize"
+        StatMinFee -> "minfee"
+        StatMinFeeRate -> "minfeerate"
+        StatMinTxSize -> "mintxsize"
+        StatOutputs -> "outs"
+        StatSubsidy -> "subsidy"
+        StatSegwitTotalSize -> "swtotal_size"
+        StatSegwitTotalWeight -> "swtotal_weight"
+        StatSegwitTxs -> "swtxs"
+        StatTime -> "time"
+        StatTotalOut -> "total_out"
+        StatTotalSize -> "total_size"
+        StatTotalWeight -> "total_weight"
+        StatTotalFee -> "totalfee"
+        StatTxs -> "txs"
+        StatUtxoIncrease -> "utxo_increase"
+        StatUtxoSizeIncrease -> "utxo_size_inc"
 
 data BlockStats = BlockStats
     { blockStatsAvgFee :: Maybe Double
