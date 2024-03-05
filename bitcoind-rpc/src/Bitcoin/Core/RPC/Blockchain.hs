@@ -149,7 +149,7 @@ data BlockHeader = BlockHeader
     , blockHeaderTime :: UTCTime
     , blockHeaderMedianTime :: UTCTime
     , blockHeaderNonce :: Word64
-    , blockHeaderDifficulty :: Scientific
+    , blockHeaderDifficulty :: Double
     , blockHeaderTxCount :: Int
     , blockHeaderPrevHash :: Maybe BlockHash
     , blockHeaderNextHash :: Maybe BlockHash
