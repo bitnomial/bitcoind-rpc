@@ -19,6 +19,7 @@ module Bitcoin.Core.RPC.Blockchain (
     getBlockFilter,
     BlockHeader (..),
     getBlockHeader,
+    BlockStat (..),
     BlockStats (..),
     getBlockStats,
     ChainTip (..),
@@ -37,6 +38,7 @@ module Bitcoin.Core.RPC.Blockchain (
 import Bitcoin.CompactFilter (BlockFilter, BlockFilterHeader)
 import Data.Aeson (
     FromJSON (..),
+    ToJSON (..),
     Value (String),
     withObject,
     withText,
@@ -76,59 +78,168 @@ import Servant.Bitcoind (
     toBitcoindClient,
  )
 
+{- | Values to plot.
+
+These are labels for the statistics accepted in the 'getblockstat' RPC command.
+-}
+data BlockStat
+    = -- | Selects the average fee in the block statistic
+      StatAvgFee
+    | -- | Selects the average feerate (in satoshis per virtual byte) statistic
+      StatAvgFeeRate
+    | -- | Selects the average transaction size statistic
+      StatAvgTxSize
+    | -- | Selects the block hash (to check for potential reorgs)
+      StatBlockHash
+    | -- | Selects feerates statistics at the 10th, 25th, 50th, 75th, and 90th percentile weight unit (in satoshis per virtual byte)
+      StatFeeRatePercentiles
+    | -- | Selects the height of the block
+      StatHeight
+    | -- | Selects the number of inputs (excluding coinbase) statistic
+      StatInputs
+    | -- | Selects the maximum fee in the block statistic
+      StatMaxFee
+    | -- | Selects the maximum feerate (in satoshis per virtual byte) statistic
+      StatMaxFeeRate
+    | -- | Selects the maximum transaction size statistic
+      StatMaxTxSize
+    | -- | Selects the truncated median fee in the block statistic
+      StatMedianFee
+    | -- | Selects the block median time past statistic
+      StatMedianTime
+    | -- | Selects the truncated median transaction size statistic
+      StatMedianTxSize
+    | -- | Selects the minimum fee in the block statistic
+      StatMinFee
+    | -- | Selects the minimum feerate (in satoshis per virtual byte) statistic
+      StatMinFeeRate
+    | -- | Selects the minimum transaction size statistic
+      StatMinTxSize
+    | -- | Selects the number of outputs statistic
+      StatOutputs
+    | -- | Selects the block subsidy
+      StatSubsidy
+    | -- | Selects the total size of all segwit transactions statistic
+      StatSegwitTotalSize
+    | -- | Selects the total weight of all segwit transactions statistic
+      StatSegwitTotalWeight
+    | -- | Selects the number of segwit transactions statistic
+      StatSegwitTxs
+    | -- | Selects the block time
+      StatTime
+    | -- | Selects the total amount in all outputs (excluding coinbase and thus reward [ie subsidy + totalfee]) statistic
+      StatTotalOut
+    | -- | Selects the total size of all non-coinbase transactions statistic
+      StatTotalSize
+    | -- | Selects the total weight of all non-coinbase transactions statistic
+      StatTotalWeight
+    | -- | Selects the fee total statistic
+      StatTotalFee
+    | -- | Selects the number of transactions (including coinbase) statistic
+      StatTxs
+    | -- | Selects the increase/decrease in the number of unspent outputs statistic
+      StatUtxoIncrease
+    | -- | Selects the increase/decrease in size for the utxo index (not discounting op_return and similar) statistic
+      StatUtxoSizeIncrease
+    deriving (Eq, Show)
+
+instance ToJSON BlockStat where
+    toJSON = \case
+        StatAvgFee -> "avgfee"
+        StatAvgFeeRate -> "avgfeerate"
+        StatAvgTxSize -> "avgtxsize"
+        StatBlockHash -> "blockhash"
+        StatFeeRatePercentiles -> "feerate_percentiles"
+        StatHeight -> "height"
+        StatInputs -> "ins"
+        StatMaxFee -> "maxfee"
+        StatMaxFeeRate -> "maxfeerate"
+        StatMaxTxSize -> "maxtxsize"
+        StatMedianFee -> "medianfee"
+        StatMedianTime -> "mediantime"
+        StatMedianTxSize -> "mediantxsize"
+        StatMinFee -> "minfee"
+        StatMinFeeRate -> "minfeerate"
+        StatMinTxSize -> "mintxsize"
+        StatOutputs -> "outs"
+        StatSubsidy -> "subsidy"
+        StatSegwitTotalSize -> "swtotal_size"
+        StatSegwitTotalWeight -> "swtotal_weight"
+        StatSegwitTxs -> "swtxs"
+        StatTime -> "time"
+        StatTotalOut -> "total_out"
+        StatTotalSize -> "total_size"
+        StatTotalWeight -> "total_weight"
+        StatTotalFee -> "totalfee"
+        StatTxs -> "txs"
+        StatUtxoIncrease -> "utxo_increase"
+        StatUtxoSizeIncrease -> "utxo_size_inc"
+
 data BlockStats = BlockStats
-    { blockStatsAvgFee :: Double
-    , blockStatsAvgFeeRate :: Word32
-    , blockStatsAvgTxSize :: Word32
-    , blockStatsBlockHash :: BlockHash
-    , blockStatsFeeRatePercentiles :: [Word32]
-    , blockStatsHeight :: BlockHeight
-    , blockStatsIns :: Word32
-    , blockStatsMaxFee :: Word32
-    , blockStatsMaxFeeRate :: Word32
-    , blockStatsMinTxSize :: Word32
-    , blockStatsOuts :: Word32
-    , blockStatsSubsidy :: Word64
-    , blockStatsSegwitSize :: Word32
-    , blockStastSegwitWeight :: Word32
-    , blockStatsSegwitCount :: Word32
-    , blockStatsTime :: UTCTime
-    , blockStatsTotalOut :: Int64
-    , blockStatsTotalSize :: Word32
-    , blockStatsTotalWeight :: Word32
-    , blockStatsTotalFee :: Word32
-    , blockStatsCount :: Word32
-    , blockStatsUtxoIncrease :: Int
-    , blockStatsUtxoSizeIncrease :: Int
+    { blockStatsAvgFee :: Maybe Double
+    , blockStatsAvgFeeRate :: Maybe Word32
+    , blockStatsAvgTxSize :: Maybe Word32
+    , blockStatsBlockHash :: Maybe BlockHash
+    , blockStatsFeeRatePercentiles :: Maybe [Word32]
+    , blockStatsHeight :: Maybe BlockHeight
+    , blockStatsIns :: Maybe Word32
+    , blockStatsMaxFee :: Maybe Word64
+    , blockStatsMaxFeeRate :: Maybe Word32
+    , blockStatsMaxTxSize :: Maybe Word32
+    , blockStatsMedianFee :: Maybe Word64
+    , blockStatsMedianTime :: Maybe UTCTime
+    , blockStatsMedianTxSize :: Maybe Word32
+    , blockStatsMinFee :: Maybe Word64
+    , blockStatsMinFeeRate :: Maybe Word32
+    , blockStatsMinTxSize :: Maybe Word32
+    , blockStatsOuts :: Maybe Word32
+    , blockStatsSubsidy :: Maybe Word64
+    , blockStatsSegwitSize :: Maybe Word32
+    , blockStastSegwitWeight :: Maybe Word32
+    , blockStatsSegwitCount :: Maybe Word32
+    , blockStatsTime :: Maybe UTCTime
+    , blockStatsTotalOut :: Maybe Int64
+    , blockStatsTotalSize :: Maybe Word32
+    , blockStatsTotalWeight :: Maybe Word32
+    , blockStatsTotalFee :: Maybe Word64
+    , blockStatsCount :: Maybe Word32
+    , blockStatsUtxoIncrease :: Maybe Int
+    , blockStatsUtxoSizeIncrease :: Maybe Int
     }
     deriving (Eq, Show)
 
 instance FromJSON BlockStats where
     parseJSON = withObject "BlockStats" $ \o ->
         BlockStats
-            <$> o .: "avgfee"
-            <*> o .: "avgfeerate"
-            <*> o .: "avgtxsize"
-            <*> o .: "blockhash"
-            <*> o .: "feerate_percentiles"
-            <*> o .: "height"
-            <*> o .: "ins"
-            <*> o .: "maxfee"
-            <*> o .: "maxfeerate"
-            <*> o .: "mintxsize"
-            <*> o .: "outs"
-            <*> o .: "subsidy"
-            <*> o .: "swtotal_size"
-            <*> o .: "swtotal_weight"
-            <*> o .: "swtxs"
-            <*> (utcTime <$> o .: "time")
-            <*> o .: "total_out"
-            <*> o .: "total_size"
-            <*> o .: "total_weight"
-            <*> o .: "totalfee"
-            <*> o .: "txs"
-            <*> o .: "utxo_increase"
-            <*> o .: "utxo_size_inc"
+            <$> o .:? "avgfee"
+            <*> o .:? "avgfeerate"
+            <*> o .:? "avgtxsize"
+            <*> o .:? "blockhash"
+            <*> o .:? "feerate_percentiles"
+            <*> o .:? "height"
+            <*> o .:? "ins"
+            <*> o .:? "maxfee"
+            <*> o .:? "maxfeerate"
+            <*> o .:? "maxtxsize"
+            <*> o .:? "medianfee"
+            <*> (fmap utcTime <$> o .:? "mediantime")
+            <*> o .:? "mediantxsize"
+            <*> o .:? "minfee"
+            <*> o .:? "minfeerate"
+            <*> o .:? "mintxsize"
+            <*> o .:? "outs"
+            <*> o .:? "subsidy"
+            <*> o .:? "swtotal_size"
+            <*> o .:? "swtotal_weight"
+            <*> o .:? "swtxs"
+            <*> (fmap utcTime <$> o .:? "time")
+            <*> o .:? "total_out"
+            <*> o .:? "total_size"
+            <*> o .:? "total_weight"
+            <*> o .:? "totalfee"
+            <*> o .:? "txs"
+            <*> o .:? "utxo_increase"
+            <*> o .:? "utxo_size_inc"
 
 data CompactFilter = CompactFilter
     { filterHeader :: BlockFilterHeader
@@ -154,6 +265,7 @@ data BlockHeader = BlockHeader
     , blockHeaderPrevHash :: Maybe BlockHash
     , blockHeaderNextHash :: Maybe BlockHash
     }
+    deriving (Eq, Show)
 
 instance FromJSON BlockHeader where
     parseJSON = withObject "BlockHeader" $ \o ->
@@ -254,7 +366,7 @@ type BlockchainRpc =
         :<|> BitcoindEndpoint "getblockfilter" (I BlockHash -> C CompactFilter)
         :<|> BitcoindEndpoint "getblockhash" (I BlockHeight -> C BlockHash)
         :<|> BitcoindEndpoint "getblockheader" (I BlockHash -> F DefTrue Bool -> C BlockHeader)
-        :<|> BitcoindEndpoint "getblockstats" (I BlockHash -> O [Text] -> C BlockStats)
+        :<|> BitcoindEndpoint "getblockstats" (I BlockHash -> O [BlockStat] -> C BlockStats)
         :<|> BitcoindEndpoint "getchaintips" (C [ChainTip])
         :<|> BitcoindEndpoint "getchaintxstats" (O Word32 -> O BlockHash -> C ChainTxStats)
         :<|> BitcoindEndpoint "getdifficulty" (C Scientific)
@@ -336,7 +448,11 @@ getBlockFilter :: BlockHash -> BitcoindClient CompactFilter
 
 -- | Returns the header of the block corresponding to the given 'BlockHash'
 getBlockHeader :: BlockHash -> BitcoindClient BlockHeader
-getBlockStats' :: BlockHash -> Maybe [Text] -> BitcoindClient BlockStats
+
+{- | Compute per block statistics for a given window. All amounts are in
+ satoshis.  It won't work for some heights with pruning.
+-}
+getBlockStats :: BlockHash -> Maybe [BlockStat] -> BitcoindClient BlockStats
 
 {- | Return information about all known tips in the block tree, including the
  main chain as well as orphaned branches.
@@ -366,7 +482,7 @@ getBestBlockHash
     :<|> getBlockFilter
     :<|> getBlockHash
     :<|> getBlockHeader
-    :<|> getBlockStats'
+    :<|> getBlockStats
     :<|> getChainTips
     :<|> getChainTxStats
     :<|> getDifficulty
@@ -375,12 +491,6 @@ getBestBlockHash
     :<|> getMempoolInfo
     :<|> getRawMempool =
         toBitcoindClient $ Proxy @BlockchainRpc
-
-{- | Compute per block statistics for a given window. All amounts are in
- satoshis.  It won't work for some heights with pruning.
--}
-getBlockStats :: BlockHash -> BitcoindClient BlockStats
-getBlockStats h = getBlockStats' h Nothing
 
 {- | Produce the block corresponding to the given 'BlockHash' if it exists. Note
 that this won't work for the Genesis block since to construct a 'BlockHeader' a
