@@ -65,3 +65,17 @@ cabal build all && cabal test all
 ```
 
 Please use `ormolu` or `fourmolu` (with the default configuration) for code formatting.
+
+Known issues
+----
+
+- A bug in `servant-client` regarding the mishandling of empty query string
+  parameters causes bad requests to be sent to bitcoin's RPC server using this
+  library; the issue has since been fixed upstream in servant by
+  https://github.com/haskell-servant/servant/pull/1589, however the fix is
+  only released on `servant-client-0.20` or newer, if you need a build plan
+  where only `servant-client-0.19` is available (e.g. stackage LTS <21.22)
+  make sure to include that fix, or pin
+  `58aa0d1c0c19f7b1c26ffc52bfd65c70934704c9` which is the latest release on
+  `servant-0.19.*` series that's known to work reliably. Most likely if using
+  GHC 9.6 or greater there's no need to worry about this.
