@@ -411,8 +411,8 @@ instance FromJSON GetBlockV2Response where
             <*> o .: "confirmations"
             <*> o .: "height"
             <*> o .: "version"
-            <*> o .: "previousblockhash"
-            <*> o .: "nextblockhash"
+            <*> o .:? "previousblockhash"
+            <*> o .:? "nextblockhash"
             <*> (o .: "merkleroot" >>= parseFromHex)
             <*> (utcTime <$> o .: "time")
             <*> (unHexEncoded <$> o .: "bits")
