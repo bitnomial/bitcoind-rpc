@@ -61,8 +61,8 @@ import Data.Text (Text)
 import Data.Time (NominalDiffTime, UTCTime)
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
 import Data.Word (Word16, Word32, Word64)
-import qualified Haskoin as H
 import Haskoin.Block (Block (..), BlockHash, BlockHeight, hexToBlockHash)
+import qualified Haskoin.Block as H hiding (GetBlocks (..), GetHeaders (..))
 import Haskoin.Crypto (Hash256)
 import Haskoin.Transaction (Tx, TxHash)
 import Servant.API ((:<|>) (..))
@@ -502,12 +502,12 @@ getBlockBlock = getBlockResponse id responseToBlock
     responseToBlock response =
         Block
             ( H.BlockHeader
-                { H.blockVersion = getBlockV2Version response
-                , H.merkleRoot = getBlockV2MerkleRoot response
-                , H.blockBits = getBlockV2Bits response
-                , H.bhNonce = getBlockV2Nonce response
-                , H.blockTimestamp = round . utcTimeToPOSIXSeconds $ getBlockV2Time response
-                , H.prevBlock =
+                { H.version = getBlockV2Version response
+                , H.merkle = getBlockV2MerkleRoot response
+                , H.bits = getBlockV2Bits response
+                , H.nonce = getBlockV2Nonce response
+                , H.timestamp = round . utcTimeToPOSIXSeconds $ getBlockV2Time response
+                , H.prev =
                     fromMaybe (error "no previous block hash on genesis") $
                         getBlockV2PreviousBlockHash response
                 }

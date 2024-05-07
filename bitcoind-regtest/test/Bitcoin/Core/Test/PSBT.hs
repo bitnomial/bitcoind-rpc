@@ -5,20 +5,13 @@ module Bitcoin.Core.Test.PSBT (
     psbtRPC,
 ) where
 
-import Control.Monad (replicateM_, when)
-import Data.ByteString.Base64 (encodeBase64)
-import Data.Functor (void)
-import Data.Maybe (mapMaybe)
-import qualified Data.Serialize as S
-import Network.HTTP.Client (Manager)
-import Test.Tasty (TestTree, testGroup)
-
 import Bitcoin.Core.RPC (
     BitcoindClient,
     Descriptor (Descriptor),
     ListUnspentOptions (ListUnspentOptions),
     PsbtInput,
     PsbtOutputs (PsbtOutputs),
+    globalContext,
     withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
@@ -30,6 +23,14 @@ import Bitcoin.Core.Test.Utils (
     testRpc,
     toInput,
  )
+import Control.Monad (replicateM_, when)
+import Data.ByteString.Base64 (encodeBase64)
+import Data.Functor (void)
+import Data.Maybe (mapMaybe)
+import qualified Data.Serialize as S
+import Haskoin.Transaction (putPSBT)
+import Network.HTTP.Client (Manager)
+import Test.Tasty (TestTree, testGroup)
 
 psbtRPC :: Manager -> NodeHandle -> TestTree
 psbtRPC mgr h =
@@ -106,4 +107,4 @@ testPSBT v = when (v >= v21_0) $ do
   where
     wallet = "testPSBT"
 
-    toBase64 = encodeBase64 . S.encode
+    toBase64 = encodeBase64 . S.runPut . putPSBT globalContext

@@ -1,7 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
@@ -14,10 +16,9 @@ module Bitcoin.Core.Regtest.Generator (
     generateWithTransactions,
 ) where
 
-import Bitcoin.Core.RPC (
-    BitcoindClient,
- )
+import Bitcoin.Core.RPC (BitcoindClient)
 import qualified Bitcoin.Core.RPC as RPC
+import Bitcoin.Core.Regtest.Crypto (globalContext)
 import Bitcoin.Core.Regtest.Framework (NodeHandle, runBitcoind)
 import Control.Arrow ((&&&))
 import Control.Concurrent (threadDelay)
@@ -33,7 +34,7 @@ import Control.Monad.Trans.State.Strict (
     modify',
     state,
  )
-import Data.Bifunctor (first)
+import Data.Bifunctor (bimap, first)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.Foldable (foldl')
@@ -46,18 +47,25 @@ import qualified Data.Serialize as S
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Data.Word (Word64, Word8)
-import Haskoin (
-    Script (Script),
-    TxHash,
-    TxIn (TxIn),
+import Data.Word (Word32, Word64, Word8)
+import Haskoin.Address (addrToText, outputAddress)
+import Haskoin.Block (Block (..), BlockHeight)
+import Haskoin.Network.Constants (btcRegTest)
+import Haskoin.Script (
+    Script (..),
+    ScriptOp (..),
+    encodeOutput,
+    intToScriptOp,
+    opPushData,
+    toP2SH,
  )
-import qualified Haskoin as H
-import Haskoin.Block (BlockHeight)
 import Haskoin.Transaction (
     OutPoint (..),
     Tx (..),
+    TxHash,
+    TxIn (..),
     TxOut (..),
+    txHash,
  )
 import Network.HTTP.Client (Manager)
 
@@ -253,24 +261,25 @@ generateWithTransactions mgr nodeHandle initGeneratorConfig = do
     pushRoots tx =
         mapM_ pushFloodRoot
             . zipMerge
-                (getOutPointAmount $ H.txHash tx)
+                (getOutPointAmount $ txHash tx)
                 snd
-                (H.scriptOutput . snd)
+                ((.script) . snd)
                 batchAddresses
-            . sortOn (H.scriptOutput . snd)
+            . sortOn ((.script) . snd)
             . zip [0 ..]
-            $ H.txOut tx
+            $ tx.outputs
 
     batchAddresses =
         sortOn snd $
             (id &&& easySpendScriptOutput . Just)
                 <$> [0 ..]
 
+    getOutPointAmount :: TxHash -> (Word8, a) -> (Word32, TxOut) -> FloodRootPoint
     getOutPointAmount txh (ix, _) (vout, txOut) =
         FloodRootPoint
             { floodOutPoint = OutPoint txh vout
             , floodOutPointLabel = Just ix
-            , floodAmount = H.outValue txOut
+            , floodAmount = txOut.value
             , floodSwept = False
             }
 
@@ -407,30 +416,31 @@ txSeries nOutputs feePerOutput floodRootPoint =
   where
     tx0 =
         Tx
-            { H.txVersion = 2
-            , H.txIn =
+            { version = 2
+            , inputs =
                 [spendEasy <$> floodOutPointLabel <*> floodOutPoint $ floodRootPoint]
-            , H.txOut = replicate nOutputs $ easySpendOutput Nothing satsPerOutput0
-            , H.txWitness = mempty
-            , H.txLockTime = 0
+            , outputs = replicate nOutputs $ easySpendOutput Nothing satsPerOutput0
+            , witness = mempty
+            , locktime = 0
             }
     satsPerOutput0 = (floodAmount floodRootPoint `quot` fromIntegral nOutputs) - feePerOutput
 
+    getNext :: Tx -> Maybe Tx
     getNext prevTx
         | satsPerOutput > 2 * feePerOutput =
             Just
                 Tx
-                    { H.txVersion = 2
-                    , H.txIn = spendEasy Nothing <$> outPoints prevTx
-                    , H.txOut = replicate nOutputs $ easySpendOutput Nothing satsPerOutput
-                    , H.txWitness = mempty
-                    , H.txLockTime = 0
+                    { version = 2
+                    , inputs = spendEasy Nothing <$> outPoints prevTx
+                    , outputs = replicate nOutputs $ easySpendOutput Nothing satsPerOutput
+                    , witness = mempty
+                    , locktime = 0
                     }
         | otherwise = Nothing
       where
-        satsPerOutput = (H.outValue . head . H.txOut) prevTx - feePerOutput
+        satsPerOutput = ((.value) . head . (.outputs)) prevTx - feePerOutput
 
-    outPoints tx = OutPoint (H.txHash tx) <$> [0 .. (fromIntegral . length . H.txOut) tx - 1]
+    outPoints tx = OutPoint (txHash tx) <$> [0 .. (fromIntegral . length . (.outputs)) tx - 1]
 
 spend ::
     Word64 ->
@@ -463,21 +473,22 @@ sweep = do
     onBlockHeight !utxos n = updateUtxoSet utxos <$> getSpentUnspent n
     getSpentUnspent = RPC.getBlockHash >=> fmap onBlock . getBlock
     getBlock h = RPC.getBlockBlock <$> RPC.getBlock h (Just 0)
-    onBlock = finalizeBlockDelta . foldl' onTransaction (BlockDelta mempty mempty) . H.blockTxns
+    onBlock :: Block -> BlockDelta
+    onBlock block = finalizeBlockDelta $ foldl' onTransaction (BlockDelta mempty mempty) block.txs
+    onTransaction :: BlockDelta -> Tx -> BlockDelta
     onTransaction delta tx =
         BlockDelta
-            { blockSpends = blockSpends delta <> Set.fromList (H.prevOutput <$> H.txIn tx)
+            { blockSpends = blockSpends delta <> Set.fromList ((.outpoint) <$> tx.inputs)
             , blockCreates =
                 blockCreates delta
                     <> ( Set.fromList
-                            . fmap (outPointValue (H.txHash tx))
+                            -- . fmap (outPointValue (txHash tx))
+                            . fmap (bimap (OutPoint (txHash tx)) (.value))
                             . filter (isEasySpend . snd)
                             . zip [0 ..]
-                            . H.txOut
                        )
-                        tx
+                        tx.outputs
             }
-    outPointValue txHash (ix, txOut) = (OutPoint txHash ix, H.outValue txOut)
     finalizeBlockDelta delta =
         BlockDelta
             { blockSpends = blockSpends delta
@@ -500,37 +511,37 @@ easySpendScript = Script . maybe mempty mkScript
   where
     mkScript ix =
         [ pushData ix
-        , H.OP_DROP
+        , OP_DROP
         ]
     pushData ix
-        | ix == 0 = H.OP_0
-        | ix <= 16 = H.intToScriptOp (fromIntegral ix)
-        | otherwise = H.opPushData $ BS.pack [ix]
+        | ix == 0 = OP_0
+        | ix <= 16 = intToScriptOp (fromIntegral ix)
+        | otherwise = opPushData $ BS.pack [ix]
 
 easySpendAddress :: Maybe Word8 -> Text
 easySpendAddress ix = addr
   where
     Just addr =
-        H.addrToText H.btcRegTest =<< (H.outputAddress . H.toP2SH) (easySpendScript ix)
+        addrToText btcRegTest =<< (outputAddress globalContext . toP2SH) (easySpendScript ix)
 
 easySpendScriptOutput :: Maybe Word8 -> ByteString
-easySpendScriptOutput = H.encodeOutputBS . H.toP2SH . easySpendScript
+easySpendScriptOutput = S.encode . encodeOutput globalContext . toP2SH . easySpendScript
 
 -- | Produce an output that we can spend without signing
 easySpendOutput :: Maybe Word8 -> Word64 -> TxOut
-easySpendOutput ix outValue = TxOut{H.outValue, H.scriptOutput = easySpendScriptOutput ix}
+easySpendOutput ix value = TxOut{value, script = easySpendScriptOutput ix}
 
 -- | This only detects easy spend outputs with an empty script
 isEasySpend :: TxOut -> Bool
-isEasySpend txOut = H.scriptOutput txOut == easySpendScriptOutput Nothing
+isEasySpend txOut = txOut.script == easySpendScriptOutput Nothing
 
 -- | Produce an input that spends an output created with 'easySpendOutput'
 spendEasy :: Maybe Word8 -> OutPoint -> TxIn
 spendEasy ix prevOutput =
     TxIn
-        { H.prevOutput
-        , H.scriptInput = S.encode $ Script [H.OP_1, H.opPushData (S.encode $ easySpendScript ix)]
-        , H.txInSequence = maxBound
+        { outpoint = prevOutput
+        , script = S.encode $ Script [OP_1, opPushData (S.encode $ easySpendScript ix)]
+        , sequence = maxBound
         }
 
 {- | Given two lists sorted by the value of the provided keying functions, merge

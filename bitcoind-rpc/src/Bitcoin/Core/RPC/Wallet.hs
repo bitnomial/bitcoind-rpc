@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
@@ -93,16 +94,28 @@ module Bitcoin.Core.RPC.Wallet (
     processPsbt,
 ) where
 
+import Bitcoin.Core.RPC.Transactions (FeeEstimationMode, PsbtInput, PsbtOutputs)
 import Data.Aeson (
     FromJSON (..),
     ToJSON (..),
-    Value (Object),
+    Value (Object, String),
     object,
     withObject,
     withText,
     (.:),
     (.:?),
     (.=),
+ )
+import Data.Aeson.Utils (
+    HexEncoded (HexEncoded),
+    partialObject,
+    rangeToJSON,
+    satsToBTCText,
+    toSatoshis,
+    unBase64Encoded,
+    unHexEncoded,
+    utcTime,
+    (.=?),
  )
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
@@ -117,29 +130,17 @@ import Haskoin (
     BlockHeight,
     DerivPath,
     Hash160,
-    OutPoint (OutPoint),
-    PartiallySignedTransaction,
-    PubKeyI,
+    Network,
+    OutPoint (..),
+    PSBT,
+    PrivateKey,
+    PublicKey,
     Script,
-    SecKey,
     Tx,
     TxHash,
+    toWif,
  )
 import Servant.API ((:<|>) (..))
-
-import Bitcoin.Core.RPC.Transactions (FeeEstimationMode, PsbtInput, PsbtOutputs)
-import Data.Aeson.Utils (
-    HexEncoded (HexEncoded),
-    partialObject,
-    rangeToJSON,
-    satsToBTCText,
-    toSatoshis,
-    unBase64Encoded,
-    unHexEncoded,
-    utcTime,
-    (.=?),
- )
-import qualified Haskoin as H
 import Servant.Bitcoind (
     BitcoindClient,
     BitcoindEndpoint,
@@ -206,7 +207,7 @@ type WalletRpc =
         :<|> BitcoindWalletEndpoint "importprivkey" (I Text -> O Text -> O Bool -> CX)
         -- WAIT importprunedfunds "rawtransaction" "txoutproof"
         --      :<|> BitcoindWalletEndpoint "importprunedfunds" ()
-        :<|> BitcoindWalletEndpoint "importpubkey" (I PubKeyI -> O Text -> O Bool -> CX)
+        :<|> BitcoindWalletEndpoint "importpubkey" (I (HexEncoded PublicKey) -> O Text -> O Bool -> CX)
         :<|> BitcoindEndpoint "importwallet" (I FilePath -> CX)
         -- WAIT keypoolrefill ( newsize )
         --      :<|> BitcoindWalletEndpoint "keypoolrefill" ()
@@ -503,7 +504,7 @@ instance ToJSON BumpFeeOptions where
 
 -- | @since 0.3.0.0
 data BumpFeeResponse = BumpFeeResponse
-    { bumpFeePSBT :: Maybe PartiallySignedTransaction
+    { bumpFeePSBT :: Maybe PSBT
     -- ^ The base64-encoded unsigned PSBT of the new transaction. (only available with 'psbtBumpFee')
     , bumpFeeTxId :: Maybe TxHash
     -- ^ The id of the new transaction. Only returned when wallet private keys are enabled.
@@ -1215,6 +1216,12 @@ instance ToJSON ImportScriptPubKey where
         ImportScript script -> toJSON $ HexEncoded script
         ImportAddress addr -> object ["address" .= addr]
 
+data WIF = WIF {wifNetwork :: Network, wifKey :: PrivateKey}
+    deriving (Eq, Show)
+
+instance ToJSON WIF where
+    toJSON (WIF network key) = String $ toWif network key
+
 -- | @since 0.3.0.0
 data ImportMultiRequest = ImportMultiRequest
     { importMultiDesc :: Maybe Text
@@ -1232,11 +1239,11 @@ data ImportMultiRequest = ImportMultiRequest
     -- ^ Allowed only if the scriptPubKey is a P2SH or P2SH-P2WSH address/scriptPubKey
     , importMultiWitnessScript :: Maybe Script
     -- ^ Allowed only if the scriptPubKey is a P2SH-P2WSH or P2WSH address/scriptPubKey
-    , importMultiPubkeys :: [PubKeyI]
+    , importMultiPubkeys :: [PublicKey]
     -- ^ Array of strings giving pubkeys to import. They must occur in P2PKH
     -- or P2WPKH scripts. They are not required when the private key is also
     -- provided (see the "keys" argument).
-    , importMultiKeys :: [SecKey]
+    , importMultiKeys :: [WIF]
     -- ^ Array of strings giving private keys to import. The corresponding
     -- public keys must occur in the output or redeemscript.
     , importMultiRange :: Maybe (Int, Maybe Int)
@@ -1264,8 +1271,8 @@ instance ToJSON ImportMultiRequest where
             , Just $ "timestamp" .= (maybe (toJSON @Text "now") toJSON . importMultiTimestamp) req
             , "reedemscript" .=? (HexEncoded <$> importMultiRedeemScript req)
             , "witnessscript" .=? (HexEncoded <$> importMultiWitnessScript req)
-            , Just $ "pubkeys" .= importMultiPubkeys req
-            , Just $ "keys" .= (HexEncoded <$> importMultiKeys req)
+            , Just $ "pubkeys" .= (HexEncoded <$> importMultiPubkeys req)
+            , Just $ "keys" .= importMultiKeys req
             , "range" .=? (fmap rangeToJSON . importMultiRange) req
             , "internal" .=? importMultiInternal req
             , "watchonly" .=? importMultiWatchOnly req
@@ -1340,7 +1347,7 @@ importPrivKey ::
  @since 0.3.0.0
 -}
 importPubKey ::
-    PubKeyI ->
+    HexEncoded PublicKey ->
     -- | An optional label
     Maybe Text ->
     -- | Rescan the wallet for transactions
@@ -1766,8 +1773,8 @@ newtype PrevOutput = PrevOutput OutPoint
 instance ToJSON PrevOutput where
     toJSON (PrevOutput outPoint) =
         object
-            [ "txid" .= H.outPointHash outPoint
-            , "vout" .= H.outPointIndex outPoint
+            [ "txid" .= outPoint.hash
+            , "vout" .= outPoint.index
             ]
 
 {- | Updates list of temporarily unspendable outputs.  Temporarily lock
@@ -2115,7 +2122,7 @@ instance ToJSON CreatePsbtOptions where
 
 -- | @since 0.3.0.0
 data CreatePsbtResponse = CreatePsbtResponse
-    { createPsbtPsbt :: PartiallySignedTransaction
+    { createPsbtPsbt :: PSBT
     , createPsbtFee :: Word64
     -- ^ Fee in sats the resulting transaction pays
     , createPsbtChangePos :: Int
@@ -2153,7 +2160,7 @@ createFundedPsbt ::
 
 -- | @since 0.3.0.0
 data ProcessPsbtResponse = ProcessPsbtResponse
-    { processPsbtPsbt :: PartiallySignedTransaction
+    { processPsbtPsbt :: PSBT
     -- ^ The partially signed transaction
     , processPsbtComplete :: Bool
     -- ^ If the transaction has a complete set of signatures
