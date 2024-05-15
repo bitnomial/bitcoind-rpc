@@ -9,7 +9,7 @@ module Bitcoin.Core.Test.Misc (
 import Bitcoin.Core.RPC
 import Bitcoin.Core.Regtest (NodeHandle)
 import qualified Bitcoin.Core.Regtest as R
-import Bitcoin.Core.Test.Utils (bitcoindTest, testRpc)
+import Bitcoin.Core.Test.Utils (bitcoindTest, globalContext, testRpc)
 import Control.Monad (replicateM)
 import Data.Text (Text)
 import Data.Word (Word64)

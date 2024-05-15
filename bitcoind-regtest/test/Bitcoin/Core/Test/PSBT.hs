@@ -11,7 +11,6 @@ import Bitcoin.Core.RPC (
     ListUnspentOptions (ListUnspentOptions),
     PsbtInput,
     PsbtOutputs (PsbtOutputs),
-    globalContext,
     withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
@@ -19,6 +18,7 @@ import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v21_0)
 import Bitcoin.Core.Test.Utils (
     bitcoindTest,
     generate,
+    globalContext,
     initWallet,
     testRpc,
     toInput,

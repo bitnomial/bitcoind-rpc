@@ -4,3 +4,4 @@ dist-newstyle/
 *.out
 /cabal.project.local
 TAGS
+.stack-work
