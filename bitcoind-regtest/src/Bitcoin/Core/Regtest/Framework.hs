@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
@@ -43,6 +44,7 @@ module Bitcoin.Core.Regtest.Framework (
     v23_0,
 ) where
 
+import Bitcoin.Core.Regtest.Crypto (globalContext)
 import Control.Concurrent (threadDelay)
 import Control.Exception (
     Exception,
@@ -62,19 +64,19 @@ import Haskoin.Address (
     addrToText,
     addressToOutput,
  )
-import Haskoin.Block (blockTxns)
-import Haskoin.Constants (btcTest)
-import Haskoin.Crypto (SecKey)
-import Haskoin.Keys (
-    PubKeyI,
+import Haskoin.Block (Block (..))
+import Haskoin.Crypto (
+    PublicKey,
+    SecKey,
     XPrvKey (..),
     deriveAddrs,
-    derivePubKeyI,
+    derivePublicKey,
     deriveXPubKey,
     makeXPrvKey,
     prvSubKeys,
     wrapSecKey,
  )
+import Haskoin.Network.Constants (btcTest)
 import Haskoin.Script (sigHashAll)
 import Haskoin.Transaction (
     OutPoint (..),
@@ -289,14 +291,14 @@ generateEnoughBlocks vTarget = go ([], 0, 0 :: Int)
  wallet.  Use 'spendPackageOutputs' to spend.
 -}
 generate :: BitcoindClient (OutPoint, Word64)
-generate =
-    fmap (processCoinbase . head . blockTxns) $
-        RPC.generateToAddress 1 textAddr0 Nothing >>= getBlock . head
+generate = do
+    block <- getBlock . head =<< RPC.generateToAddress 1 textAddr0 Nothing
+    pure . processCoinbase . head $ block.txs
   where
     getBlock h = RPC.getBlockBlock <$> RPC.getBlock h (Just 0)
 
 processCoinbase :: Tx -> (OutPoint, Word64)
-processCoinbase tx0 = (OutPoint (txHash tx0) 0, outValue . head $ txOut tx0)
+processCoinbase tx0 = (OutPoint (txHash tx0) 0, (head $ tx0.outputs).value)
 
 -- | Spend outputs created by 'generate'
 spendPackageOutputs ::
@@ -322,8 +324,8 @@ spendPackageOutputs inputs addr vTarget = do
         sigIn (op, val) = SigInput (addressToOutput addr0) val op sigHashAll Nothing
 
     (outs, vFund) <- outSpec
-    txSpec <- buildAddrTx btcTest (fst <$> inputs) outs
-    tx <- signTx btcTest txSpec (sigIn <$> inputs) [key0]
+    txSpec <- buildAddrTx btcTest globalContext (fst <$> inputs) outs
+    tx <- signTx btcTest globalContext txSpec (sigIn <$> inputs) [key0]
     return (tx, vFund)
 
 -- | Root key for the package wallet
@@ -332,18 +334,18 @@ xprv = makeXPrvKey "bitcoind-regtest key seed"
 
 -- | Example secret keys
 keys :: [SecKey]
-keys = xPrvKey . fst <$> prvSubKeys xprv 0
+keys = (.key) . fst <$> prvSubKeys globalContext xprv 0
 
 -- | Example public keys
-pubKeys :: [PubKeyI]
-pubKeys = derivePubKeyI . wrapSecKey True <$> keys
+pubKeys :: [PublicKey]
+pubKeys = derivePublicKey globalContext . wrapSecKey True <$> keys
 
 key0 :: SecKey
 key0 : _ = keys
 
 -- | Example p2pkh addresses
 addrs :: [Address]
-addrs = repack <$> deriveAddrs (deriveXPubKey xprv) 0
+addrs = repack <$> deriveAddrs globalContext (deriveXPubKey globalContext xprv) 0
   where
     repack (x, _, _) = x
 

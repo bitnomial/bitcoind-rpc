@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
@@ -5,27 +6,26 @@ module Bitcoin.Core.Test.Misc (
     miscRPC,
 ) where
 
+import Bitcoin.Core.RPC
+import Bitcoin.Core.Regtest (NodeHandle)
+import qualified Bitcoin.Core.Regtest as R
+import Bitcoin.Core.Test.Utils (bitcoindTest, globalContext, testRpc)
 import Control.Monad (replicateM)
 import Data.Text (Text)
 import Data.Word (Word64)
 import Haskoin.Address (Address (..), addrToText, pubKeyAddr)
 import Haskoin.Block (Block (..), BlockHash)
-import Haskoin.Constants (btcTest)
-import Haskoin.Crypto (SecKey)
-import Haskoin.Keys (
-    PubKeyI,
-    derivePubKeyI,
+import Haskoin.Crypto (
+    PublicKey,
+    SecKey,
+    derivePublicKey,
     secKey,
     wrapSecKey,
  )
+import Haskoin.Network.Constants (btcTest)
 import Haskoin.Transaction (OutPoint (..), Tx (..), TxHash, txHash)
 import Network.HTTP.Client (Manager)
 import Test.Tasty (TestTree, testGroup)
-
-import Bitcoin.Core.RPC
-import Bitcoin.Core.Regtest (NodeHandle)
-import qualified Bitcoin.Core.Regtest as R
-import Bitcoin.Core.Test.Utils (bitcoindTest, testRpc)
 
 miscRPC :: Manager -> NodeHandle -> TestTree
 miscRPC mgr h =
@@ -70,11 +70,11 @@ testGenerate = generateToAddress 120 addrText Nothing
 key :: SecKey
 Just key = secKey "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-pk :: PubKeyI
-pk = derivePubKeyI $ wrapSecKey True key
+pk :: PublicKey
+pk = derivePublicKey globalContext $ wrapSecKey True key
 
 addr :: Address
-addr = pubKeyAddr pk
+addr = pubKeyAddr globalContext pk
 
 addrText :: Text
 Just addrText = addrToText btcTest addr
@@ -94,8 +94,9 @@ testBlockStats :: BitcoindClient BlockStats
 testBlockStats = getBestBlockHash >>= \h -> getBlockStats h Nothing
 
 testGetTransaction :: BitcoindClient Tx
-testGetTransaction =
-    getBestBlockHash >>= getBlock' >>= (`getRawTransaction` Nothing) . txHash . head . blockTxns
+testGetTransaction = do
+    block <- getBlock' =<< getBestBlockHash
+    getRawTransaction (txHash $ head block.txs) Nothing
   where
     getBlock' h = getBlockBlock <$> getBlock h (Just 0)
 

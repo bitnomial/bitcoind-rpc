@@ -60,7 +60,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Word (Word32, Word64)
 import Haskoin.Block (BlockHash, BlockHeight)
-import Haskoin.Transaction (PartiallySignedTransaction, Tx, TxHash)
+import Haskoin.Transaction (PSBT, Tx, TxHash)
 import Haskoin.Util (encodeHex)
 import Servant.API ((:<|>) (..))
 import Servant.Bitcoind (
@@ -96,7 +96,7 @@ type RawTxRpc =
                   I PsbtOutputs ->
                   O Int ->
                   O Bool ->
-                  C (Base64Encoded PartiallySignedTransaction)
+                  C (Base64Encoded PSBT)
                 )
         :<|> BitcoindEndpoint
                 "finalizepsbt"
@@ -104,8 +104,8 @@ type RawTxRpc =
                   O Bool ->
                   C FinalizePsbtResponse
                 )
-        :<|> BitcoindEndpoint "joinpsbts" (I [Text] -> C (Base64Encoded PartiallySignedTransaction))
-        :<|> BitcoindEndpoint "utxoupdatepsbt" (I Text -> I [Descriptor] -> C (Base64Encoded PartiallySignedTransaction))
+        :<|> BitcoindEndpoint "joinpsbts" (I [Text] -> C (Base64Encoded PSBT))
+        :<|> BitcoindEndpoint "utxoupdatepsbt" (I Text -> I [Descriptor] -> C (Base64Encoded PSBT))
         :<|> BitcoindEndpoint "estimatesmartfee" (I Int -> O FeeEstimationMode -> C EstimateSmartFeeResponse)
 
 sendRawTransaction
@@ -272,7 +272,7 @@ createPsbt ::
     Maybe Int ->
     -- | Marks this transaction as BIP125 replaceable.
     Maybe Bool ->
-    BitcoindClient PartiallySignedTransaction
+    BitcoindClient PSBT
 createPsbt inputs outputs locktime = fmap unBase64Encoded . createPsbt_ inputs outputs locktime
 
 createPsbt_ ::
@@ -280,11 +280,11 @@ createPsbt_ ::
     PsbtOutputs ->
     Maybe Int ->
     Maybe Bool ->
-    BitcoindClient (Base64Encoded PartiallySignedTransaction)
+    BitcoindClient (Base64Encoded PSBT)
 
 -- | @since 0.3.0.0
 data FinalizePsbtResponse = FinalizePsbtResponse
-    { finalizedPsbt :: Maybe PartiallySignedTransaction
+    { finalizedPsbt :: Maybe PSBT
     -- ^ The base64-encoded partially signed transaction if not extracted
     , finalizedTx :: Maybe Tx
     -- ^ The hex-encoded network transaction if extracted
@@ -325,12 +325,12 @@ finalizePsbt ::
 joinPsbts ::
     -- | A base64 string of a PSBT
     [Text] ->
-    BitcoindClient PartiallySignedTransaction
+    BitcoindClient PSBT
 joinPsbts = fmap unBase64Encoded . joinPsbts_
 
 joinPsbts_ ::
     [Text] ->
-    BitcoindClient (Base64Encoded PartiallySignedTransaction)
+    BitcoindClient (Base64Encoded PSBT)
 
 -- | @since 0.3.0.0
 data Descriptor
@@ -356,13 +356,13 @@ utxoUpdatePsbt ::
     -- | A base64 string of a PSBT
     Text ->
     [Descriptor] ->
-    BitcoindClient PartiallySignedTransaction
+    BitcoindClient PSBT
 utxoUpdatePsbt psbt = fmap unBase64Encoded . utxoUpdatePsbt_ psbt
 
 utxoUpdatePsbt_ ::
     Text ->
     [Descriptor] ->
-    BitcoindClient (Base64Encoded PartiallySignedTransaction)
+    BitcoindClient (Base64Encoded PSBT)
 
 -- | @since 0.3.0.0
 data FeeEstimationMode
