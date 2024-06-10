@@ -120,8 +120,6 @@ data NodeHandle = NodeHandle
     { nodeP2pPort :: Int
     , nodeRpcPort :: Int
     , nodeAuth :: BasicAuthData
-    , nodeRawTx :: FilePath
-    , nodeRawBlock :: FilePath
     , nodeVersion :: Version
     }
 
@@ -165,8 +163,6 @@ withBitcoind basePort dataDir k = do
                         basePort
                         (getRpcPort basePort)
                         auth
-                        (rawTxSocket dd)
-                        (rawBlockSocket dd)
                         v
             mgr <- newManager defaultManagerSettings
             waitForRPC mgr nodeHandle
@@ -238,8 +234,6 @@ bitcoind ddir basePort output =
         , "-datadir=" <> ddir
         , "-port=" <> show (getPeerPort basePort)
         , "-rpcport=" <> show (getRpcPort basePort)
-        , "-zmqpubrawblock=" <> rawBlockSocket ddir
-        , "-zmqpubrawtx=" <> rawTxSocket ddir
         ]
 
 getPeerPort :: Int -> Int
@@ -247,12 +241,6 @@ getPeerPort = id
 
 getRpcPort :: Int -> Int
 getRpcPort = (+ 1)
-
-rawTxSocket :: FilePath -> String
-rawTxSocket tmp = "ipc://" <> tmp <> "/bitcoind-rpc.tx.raw"
-
-rawBlockSocket :: FilePath -> String
-rawBlockSocket tmp = "ipc://" <> tmp <> "/bitcoind-rpc.block.raw"
 
 oneBitcoin :: Word64
 oneBitcoin = 100_000_000
