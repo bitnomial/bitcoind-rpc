@@ -32,7 +32,7 @@ import Bitcoin.Core.RPC (
     withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
-import Bitcoin.Core.Regtest (NodeHandle, nodeVersion)
+import Bitcoin.Core.Regtest (NodeHandle)
 import Bitcoin.Core.Test.Utils (
     bitcoindTest,
     generate,
