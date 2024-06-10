@@ -66,7 +66,7 @@ testWalletCommands = do
             Nothing
             walletPassword
             (Just True)
-            (Just False) -- legacy wallet
+            Nothing
             Nothing
             Nothing
     liftIO $ RPC.loadWalletName loadWalletR @?= walletName
