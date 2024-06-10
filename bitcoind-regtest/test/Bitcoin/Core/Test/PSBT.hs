@@ -14,7 +14,7 @@ import Bitcoin.Core.RPC (
     withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
-import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v21_0)
+import Bitcoin.Core.Regtest (NodeHandle)
 import Bitcoin.Core.Test.Utils (
     bitcoindTest,
     generate,
@@ -23,7 +23,7 @@ import Bitcoin.Core.Test.Utils (
     testRpc,
     toInput,
  )
-import Control.Monad (replicateM_, when)
+import Control.Monad (replicateM_)
 import Data.ByteString.Base64 (encodeBase64)
 import Data.Functor (void)
 import Data.Maybe (mapMaybe)
@@ -36,9 +36,7 @@ psbtRPC :: Manager -> NodeHandle -> TestTree
 psbtRPC mgr h =
     testGroup
         "psbt-rpc"
-        [bitcoindTest mgr h $ testRpc "psbt" (testPSBT v)]
-  where
-    v = nodeVersion h
+        [bitcoindTest mgr h $ testRpc "psbt" testPSBT]
 
 data Fixture = Fixture
     { inputsA :: [PsbtInput]
@@ -48,8 +46,8 @@ data Fixture = Fixture
     , outputsB :: PsbtOutputs
     }
 
-testPSBT :: Version -> BitcoindClient ()
-testPSBT v = when (v >= v21_0) $ do
+testPSBT :: BitcoindClient ()
+testPSBT = do
     initWallet wallet
     fixture <- withWallet wallet $ do
         replicateM_ 200 generate

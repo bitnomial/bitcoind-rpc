@@ -33,8 +33,6 @@ module Bitcoin.Core.Regtest (
     textAddrs,
 
     -- * Versions
-    v23_2,
-    v24_2,
     v25_2,
     v26_1,
     v27_0,
