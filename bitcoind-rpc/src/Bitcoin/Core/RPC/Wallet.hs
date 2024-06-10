@@ -106,6 +106,7 @@ import Data.Aeson (
     (.:?),
     (.=),
  )
+import Data.Aeson.Types (Parser)
 import Data.Aeson.Utils (
     HexEncoded (HexEncoded),
     partialObject,
@@ -140,6 +141,7 @@ import Haskoin (
     TxHash,
     toWif,
  )
+import qualified Haskoin as H
 import Servant.API ((:<|>) (..))
 import Servant.Bitcoind (
     BitcoindClient,
@@ -752,10 +754,20 @@ instance FromJSON AddressInfo where
             <*> obj .:? "embedded"
             <*> obj .:? "compressed"
             <*> (fmap utcTime <$> obj .:? "timestamp")
-            <*> obj .:? "hdkeypath"
+            <*> (obj .:? "hdkeypath" >>= traverse parseDerivPath)
             <*> (fmap unHexEncoded <$> obj .:? "hdseedid")
             <*> obj .:? "hdmasterfingerprint"
             <*> obj .: "labels"
+
+parseDerivPath :: String -> Parser DerivPath
+parseDerivPath =
+    maybe (fail "Unable to parse derivation path") (pure . (.get))
+        . H.parsePath
+        . fmap normalizeHardMark
+  where
+    normalizeHardMark = \case
+        'h' -> '\''
+        x -> x
 
 {- | Return information about the given bitcoin address.
  Some of the information will only be present if the address is in the active wallet.
