@@ -552,7 +552,7 @@ data LoadWalletResponse = LoadWalletResponse
     { loadWalletName :: Text
     -- ^ The wallet name if created successfully. If the wallet was created
     -- using a full path, the wallet_name will be the full path.
-    , loadWalletWarning :: Text
+    , loadWalletWarning :: Maybe Text
     -- ^ Warning message if wallet was not loaded cleanly.
     }
     deriving (Eq, Show)
@@ -561,7 +561,7 @@ instance FromJSON LoadWalletResponse where
     parseJSON = withObject "LoadWalletResponse" $ \obj ->
         LoadWalletResponse
             <$> obj .: "name"
-            <*> obj .: "warning"
+            <*> obj .:? "warning"
 
 -- | Creates and loads a new wallet.
 createWallet ::
@@ -2045,11 +2045,13 @@ signRawTx ::
     Maybe Text ->
     BitcoindClient SignRawTxResponse
 
-newtype UnloadWalletResponse = UnloadWalletResponse {unUnloadWalletResponse :: Text}
+newtype UnloadWalletResponse = UnloadWalletResponse {unUnloadWalletResponse :: Maybe Text}
     deriving (Eq, Show)
 
 instance FromJSON UnloadWalletResponse where
-    parseJSON = withObject "UnloadWalletResponse" $ fmap UnloadWalletResponse . (.: "warning")
+    parseJSON =
+        withObject "UnloadWalletResponse" $
+            fmap UnloadWalletResponse . (.:? "warning")
 
 unloadWallet_ ::
     Maybe Text ->
@@ -2069,7 +2071,7 @@ unloadWallet ::
     -- | Save wallet name to persistent settings and load on startup. True to
     -- add wallet to startup list, false to remove, null to leave unchanged.
     Maybe Bool ->
-    BitcoindClient Text
+    BitcoindClient (Maybe Text)
 unloadWallet name = fmap unUnloadWalletResponse . unloadWallet_ name
 
 -- | @since 0.3.0.0
