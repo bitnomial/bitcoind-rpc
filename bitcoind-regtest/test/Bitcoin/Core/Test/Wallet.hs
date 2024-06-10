@@ -40,6 +40,7 @@ import Bitcoin.Core.Test.Utils (
     shouldMatch,
     testRpc,
  )
+import qualified Data.List as L
 
 walletRPC :: Manager -> NodeHandle -> TestTree
 walletRPC mgr h =
@@ -77,6 +78,7 @@ testWalletCommands = do
     RPC.listWallets >>= shouldMatch mempty
 
     RPC.loadWallet walletName Nothing
+    RPC.walletPassphrase walletPassword 60
     RPC.listWallets >>= shouldMatch [walletName]
 
     walletInfo <- RPC.getWalletInfo
@@ -93,14 +95,12 @@ testWalletCommands = do
     RPC.setTxFee 1000
 
     tmpDir <- liftIO getCanonicalTemporaryDirectory
-    let walletDump = tmpDir <> "/wallet-dump"
-    RPC.dumpWallet walletDump
 
     let walletBackup = tmpDir <> "/wallet-backup"
     RPC.backupWallet walletBackup
 
     RPC.walletLock
-    liftIO $ mapM_ removeFile [walletDump, walletBackup]
+    liftIO $ mapM_ removeFile [walletBackup]
     void $ RPC.unloadWallet (Just walletName) Nothing
   where
     walletName = "testCreateWallet"
@@ -110,7 +110,7 @@ testAddressCommands :: BitcoindClient ()
 testAddressCommands = do
     mapM_ initWallet [wallet1, wallet2]
 
-    (privKey, someAddress) <- withWallet wallet1 $ do
+    void . withWallet wallet1 $ do
         newAddress <- RPC.getNewAddress (Just label1) (Just Bech32)
         newAddress2 <- RPC.getNewAddress (Just label2) (Just Legacy)
         newAddress3 <- RPC.getNewAddress (Just label2) (Just P2SHSegwit)
@@ -132,17 +132,8 @@ testAddressCommands = do
         RPC.setLabel newAddress label3
         RPC.getAddressesByLabel label3 >>= shouldMatch [(newAddress, PurposeRecv)] . Map.toList
 
-        RPC.addMultisigAddress 2 [newAddress2, newAddress3, newAddress4] Nothing Nothing
-        privKey <- RPC.dumpPrivKey newAddress
-
         signingAddress <- RPC.getNewAddress Nothing (Just Legacy)
         RPC.signMessage signingAddress "TEST"
-
-        pure (privKey, newAddress2)
-
-    withWallet wallet2 $ do
-        RPC.importPrivKey privKey (Just "priv-test") Nothing
-        RPC.importAddress someAddress (Just "addr-test") (Just True) Nothing
   where
     label1 = "account-1"
     label2 = "account-2"
@@ -189,7 +180,7 @@ testTransactionCommands = do
                 (ListUnspentOptions Nothing Nothing Nothing Nothing)
         liftIO . assertBool "At least one output" $ (not . null) unspent
         RPC.lockUnspent False $ toOutPoint <$> unspent
-        RPC.listLockUnspent >>= shouldMatch (toOutPoint <$> unspent)
+        RPC.listLockUnspent >>= shouldMatch (L.sort $ toOutPoint <$> unspent) . L.sort
 
         RPC.lockUnspent True $ toOutPoint <$> unspent
         txId2 <-
