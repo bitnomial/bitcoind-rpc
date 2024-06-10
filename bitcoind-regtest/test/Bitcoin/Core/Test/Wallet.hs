@@ -6,7 +6,7 @@ module Bitcoin.Core.Test.Wallet (
     walletRPC,
 ) where
 
-import Control.Monad (replicateM, replicateM_, when)
+import Control.Monad (replicateM, replicateM_)
 import Control.Monad.IO.Class (liftIO)
 import Data.Functor (void)
 import Data.List (sortOn)
@@ -32,7 +32,7 @@ import Bitcoin.Core.RPC (
     withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
-import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v20_1, v22_0, v23_0)
+import Bitcoin.Core.Regtest (NodeHandle, nodeVersion)
 import Bitcoin.Core.Test.Utils (
     bitcoindTest,
     generate,
@@ -40,22 +40,18 @@ import Bitcoin.Core.Test.Utils (
     shouldMatch,
     testRpc,
  )
+import qualified Data.List as L
 
 walletRPC :: Manager -> NodeHandle -> TestTree
 walletRPC mgr h =
     testGroup "wallet-rpc" $
-        if v > v20_1
-            then
-                bitcoindTest mgr h
-                    <$> [ testRpc "walletCommands" testWalletCommands
-                        , testRpc "addressCommands" testAddressCommands
-                        , testRpc "transactionCommands" testTransactionCommands
-                        , testRpc "descriptorCommands" $ testDescriptorCommands v
-                        , testRpc "psbtCommands" testPsbtCommands
-                        ]
-            else mempty
-  where
-    v = nodeVersion h
+        bitcoindTest mgr h
+            <$> [ testRpc "walletCommands" testWalletCommands
+                , testRpc "addressCommands" testAddressCommands
+                , testRpc "transactionCommands" testTransactionCommands
+                , testRpc "descriptorCommands" testDescriptorCommands
+                , testRpc "psbtCommands" testPsbtCommands
+                ]
 
 testWalletCommands :: BitcoindClient ()
 testWalletCommands = do
@@ -66,7 +62,7 @@ testWalletCommands = do
             Nothing
             walletPassword
             (Just True)
-            (Just False) -- legacy wallet
+            Nothing
             Nothing
             Nothing
     liftIO $ RPC.loadWalletName loadWalletR @?= walletName
@@ -77,6 +73,7 @@ testWalletCommands = do
     RPC.listWallets >>= shouldMatch mempty
 
     RPC.loadWallet walletName Nothing
+    RPC.walletPassphrase walletPassword 60
     RPC.listWallets >>= shouldMatch [walletName]
 
     walletInfo <- RPC.getWalletInfo
@@ -93,14 +90,12 @@ testWalletCommands = do
     RPC.setTxFee 1000
 
     tmpDir <- liftIO getCanonicalTemporaryDirectory
-    let walletDump = tmpDir <> "/wallet-dump"
-    RPC.dumpWallet walletDump
 
     let walletBackup = tmpDir <> "/wallet-backup"
     RPC.backupWallet walletBackup
 
     RPC.walletLock
-    liftIO $ mapM_ removeFile [walletDump, walletBackup]
+    liftIO $ mapM_ removeFile [walletBackup]
     void $ RPC.unloadWallet (Just walletName) Nothing
   where
     walletName = "testCreateWallet"
@@ -110,7 +105,7 @@ testAddressCommands :: BitcoindClient ()
 testAddressCommands = do
     mapM_ initWallet [wallet1, wallet2]
 
-    (privKey, someAddress) <- withWallet wallet1 $ do
+    void . withWallet wallet1 $ do
         newAddress <- RPC.getNewAddress (Just label1) (Just Bech32)
         newAddress2 <- RPC.getNewAddress (Just label2) (Just Legacy)
         newAddress3 <- RPC.getNewAddress (Just label2) (Just P2SHSegwit)
@@ -132,17 +127,8 @@ testAddressCommands = do
         RPC.setLabel newAddress label3
         RPC.getAddressesByLabel label3 >>= shouldMatch [(newAddress, PurposeRecv)] . Map.toList
 
-        RPC.addMultisigAddress 2 [newAddress2, newAddress3, newAddress4] Nothing Nothing
-        privKey <- RPC.dumpPrivKey newAddress
-
         signingAddress <- RPC.getNewAddress Nothing (Just Legacy)
         RPC.signMessage signingAddress "TEST"
-
-        pure (privKey, newAddress2)
-
-    withWallet wallet2 $ do
-        RPC.importPrivKey privKey (Just "priv-test") Nothing
-        RPC.importAddress someAddress (Just "addr-test") (Just True) Nothing
   where
     label1 = "account-1"
     label2 = "account-2"
@@ -189,7 +175,7 @@ testTransactionCommands = do
                 (ListUnspentOptions Nothing Nothing Nothing Nothing)
         liftIO . assertBool "At least one output" $ (not . null) unspent
         RPC.lockUnspent False $ toOutPoint <$> unspent
-        RPC.listLockUnspent >>= shouldMatch (toOutPoint <$> unspent)
+        RPC.listLockUnspent >>= shouldMatch (L.sort $ toOutPoint <$> unspent) . L.sort
 
         RPC.lockUnspent True $ toOutPoint <$> unspent
         txId2 <-
@@ -236,8 +222,8 @@ testTransactionCommands = do
 toOutPoint :: OutputDetails -> OutPoint
 toOutPoint = OutPoint <$> RPC.outputTxId <*> fromIntegral . RPC.outputVOut
 
-testDescriptorCommands :: Version -> BitcoindClient ()
-testDescriptorCommands v = do
+testDescriptorCommands :: BitcoindClient ()
+testDescriptorCommands = do
     RPC.createWallet walletName Nothing Nothing mempty (Just True) (Just True) Nothing Nothing
     withWallet walletName $ do
         RPC.getNewAddress (Just "internal") Nothing
@@ -251,9 +237,7 @@ testDescriptorCommands v = do
                 Nothing
                 (Just "imported-descriptor")
             ]
-        when (v >= v22_0 && v < v23_0) $ RPC.listDescriptors >>= shouldMatch 6 . length
-        -- Newly created descriptor wallets will contain an automatically generated tr() descriptor
-        when (v >= v23_0) $ RPC.listDescriptors >>= shouldMatch 8 . length
+        RPC.listDescriptors >>= shouldMatch 8 . length
   where
     walletName = "descriptorWallet"
     -- Taken from bitcoind descriptor wallet documentation

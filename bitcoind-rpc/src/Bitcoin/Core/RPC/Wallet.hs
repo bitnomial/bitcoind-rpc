@@ -106,6 +106,7 @@ import Data.Aeson (
     (.:?),
     (.=),
  )
+import Data.Aeson.Types (Parser)
 import Data.Aeson.Utils (
     HexEncoded (HexEncoded),
     partialObject,
@@ -140,6 +141,7 @@ import Haskoin (
     TxHash,
     toWif,
  )
+import qualified Haskoin as H
 import Servant.API ((:<|>) (..))
 import Servant.Bitcoind (
     BitcoindClient,
@@ -552,7 +554,7 @@ data LoadWalletResponse = LoadWalletResponse
     { loadWalletName :: Text
     -- ^ The wallet name if created successfully. If the wallet was created
     -- using a full path, the wallet_name will be the full path.
-    , loadWalletWarning :: Text
+    , loadWalletWarning :: Maybe Text
     -- ^ Warning message if wallet was not loaded cleanly.
     }
     deriving (Eq, Show)
@@ -561,7 +563,7 @@ instance FromJSON LoadWalletResponse where
     parseJSON = withObject "LoadWalletResponse" $ \obj ->
         LoadWalletResponse
             <$> obj .: "name"
-            <*> obj .: "warning"
+            <*> obj .:? "warning"
 
 -- | Creates and loads a new wallet.
 createWallet ::
@@ -752,10 +754,20 @@ instance FromJSON AddressInfo where
             <*> obj .:? "embedded"
             <*> obj .:? "compressed"
             <*> (fmap utcTime <$> obj .:? "timestamp")
-            <*> obj .:? "hdkeypath"
+            <*> (obj .:? "hdkeypath" >>= traverse parseDerivPath)
             <*> (fmap unHexEncoded <$> obj .:? "hdseedid")
             <*> obj .:? "hdmasterfingerprint"
             <*> obj .: "labels"
+
+parseDerivPath :: String -> Parser DerivPath
+parseDerivPath =
+    maybe (fail "Unable to parse derivation path") (pure . (.get))
+        . H.parsePath
+        . fmap normalizeHardMark
+  where
+    normalizeHardMark = \case
+        'h' -> '\''
+        x -> x
 
 {- | Return information about the given bitcoin address.
  Some of the information will only be present if the address is in the active wallet.
@@ -2045,11 +2057,13 @@ signRawTx ::
     Maybe Text ->
     BitcoindClient SignRawTxResponse
 
-newtype UnloadWalletResponse = UnloadWalletResponse {unUnloadWalletResponse :: Text}
+newtype UnloadWalletResponse = UnloadWalletResponse {unUnloadWalletResponse :: Maybe Text}
     deriving (Eq, Show)
 
 instance FromJSON UnloadWalletResponse where
-    parseJSON = withObject "UnloadWalletResponse" $ fmap UnloadWalletResponse . (.: "warning")
+    parseJSON =
+        withObject "UnloadWalletResponse" $
+            fmap UnloadWalletResponse . (.:? "warning")
 
 unloadWallet_ ::
     Maybe Text ->
@@ -2069,7 +2083,7 @@ unloadWallet ::
     -- | Save wallet name to persistent settings and load on startup. True to
     -- add wallet to startup list, false to remove, null to leave unchanged.
     Maybe Bool ->
-    BitcoindClient Text
+    BitcoindClient (Maybe Text)
 unloadWallet name = fmap unUnloadWalletResponse . unloadWallet_ name
 
 -- | @since 0.3.0.0

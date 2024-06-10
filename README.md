@@ -26,17 +26,12 @@ This package provides some tooling for testing a bitcoin-core integration.  Feat
 Supported bitcoin-core versions
 ----
 
-Full support only for `v22.0`.
+Full support only for `v27.0`.
 
 Limited support for:
 
-* `v0.19.1`
-* `v0.20.0`
-* `v0.20.1`
-* `v0.21.0`
-* `v0.21.1`
-* `v0.21.0` 
-* `v0.21.1`
+* `v25.2`
+* `v26.1`
 
 Test suite
 ----

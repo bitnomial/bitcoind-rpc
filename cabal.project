@@ -20,7 +20,3 @@ source-repository-package
   subdir:
     servant-jsonrpc
     servant-jsonrpc-client
-
-constraints:
-  -- haskoin-core-0.21.2 needs
-  base16 < 1
