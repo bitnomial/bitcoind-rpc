@@ -35,13 +35,9 @@ module Bitcoin.Core.Regtest.Framework (
     textAddrs,
 
     -- * Versions
-    v19_1,
-    v20_0,
-    v20_1,
-    v21_0,
-    v21_1,
-    v22_0,
-    v23_0,
+    v25_2,
+    v26_1,
+    v27_0,
 ) where
 
 import Bitcoin.Core.Regtest.Crypto (globalContext)
@@ -349,11 +345,7 @@ textAddrs = addrToText' <$> addrs
 textAddr0, textAddr1, textAddr2 :: Text
 textAddr0 : textAddr1 : textAddr2 : _ = textAddrs
 
-v19_1, v20_0, v20_1, v21_0, v21_1, v22_0, v23_0 :: Version
-v19_1 = (0, 19, 1)
-v20_0 = (0, 20, 0)
-v20_1 = (0, 20, 1)
-v21_0 = (0, 21, 0)
-v21_1 = (0, 21, 1)
-v22_0 = (22, 0, 0)
-v23_0 = (23, 0, 0)
+v25_2, v26_1, v27_0 :: Version
+v25_2 = (25, 2, 0)
+v26_1 = (26, 1, 0)
+v27_0 = (27, 0, 0)

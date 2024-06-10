@@ -6,7 +6,7 @@ module Bitcoin.Core.Test.Wallet (
     walletRPC,
 ) where
 
-import Control.Monad (replicateM, replicateM_, when)
+import Control.Monad (replicateM, replicateM_)
 import Control.Monad.IO.Class (liftIO)
 import Data.Functor (void)
 import Data.List (sortOn)
@@ -32,7 +32,7 @@ import Bitcoin.Core.RPC (
     withWallet,
  )
 import qualified Bitcoin.Core.RPC as RPC
-import Bitcoin.Core.Regtest (NodeHandle, Version, nodeVersion, v20_1, v22_0, v23_0)
+import Bitcoin.Core.Regtest (NodeHandle, nodeVersion)
 import Bitcoin.Core.Test.Utils (
     bitcoindTest,
     generate,
@@ -45,18 +45,13 @@ import qualified Data.List as L
 walletRPC :: Manager -> NodeHandle -> TestTree
 walletRPC mgr h =
     testGroup "wallet-rpc" $
-        if v > v20_1
-            then
-                bitcoindTest mgr h
-                    <$> [ testRpc "walletCommands" testWalletCommands
-                        , testRpc "addressCommands" testAddressCommands
-                        , testRpc "transactionCommands" testTransactionCommands
-                        , testRpc "descriptorCommands" $ testDescriptorCommands v
-                        , testRpc "psbtCommands" testPsbtCommands
-                        ]
-            else mempty
-  where
-    v = nodeVersion h
+        bitcoindTest mgr h
+            <$> [ testRpc "walletCommands" testWalletCommands
+                , testRpc "addressCommands" testAddressCommands
+                , testRpc "transactionCommands" testTransactionCommands
+                , testRpc "descriptorCommands" testDescriptorCommands
+                , testRpc "psbtCommands" testPsbtCommands
+                ]
 
 testWalletCommands :: BitcoindClient ()
 testWalletCommands = do
@@ -227,8 +222,8 @@ testTransactionCommands = do
 toOutPoint :: OutputDetails -> OutPoint
 toOutPoint = OutPoint <$> RPC.outputTxId <*> fromIntegral . RPC.outputVOut
 
-testDescriptorCommands :: Version -> BitcoindClient ()
-testDescriptorCommands v = do
+testDescriptorCommands :: BitcoindClient ()
+testDescriptorCommands = do
     RPC.createWallet walletName Nothing Nothing mempty (Just True) (Just True) Nothing Nothing
     withWallet walletName $ do
         RPC.getNewAddress (Just "internal") Nothing
@@ -242,9 +237,7 @@ testDescriptorCommands v = do
                 Nothing
                 (Just "imported-descriptor")
             ]
-        when (v >= v22_0 && v < v23_0) $ RPC.listDescriptors >>= shouldMatch 6 . length
-        -- Newly created descriptor wallets will contain an automatically generated tr() descriptor
-        when (v >= v23_0) $ RPC.listDescriptors >>= shouldMatch 8 . length
+        RPC.listDescriptors >>= shouldMatch 8 . length
   where
     walletName = "descriptorWallet"
     -- Taken from bitcoind descriptor wallet documentation

@@ -33,13 +33,11 @@ module Bitcoin.Core.Regtest (
     textAddrs,
 
     -- * Versions
-    v19_1,
-    v20_0,
-    v20_1,
-    v21_0,
-    v21_1,
-    v22_0,
-    v23_0,
+    v23_2,
+    v24_2,
+    v25_2,
+    v26_1,
+    v27_0,
 ) where
 
 import Bitcoin.Core.Regtest.Framework
