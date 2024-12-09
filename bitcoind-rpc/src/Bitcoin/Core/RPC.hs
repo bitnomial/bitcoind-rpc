@@ -16,6 +16,7 @@ module Bitcoin.Core.RPC (
     BitcoindClient,
     runBitcoind,
     tryBitcoind,
+    lower,
     cookieClient,
     basicAuthFromCookie,
     mkBitcoindEnv,
@@ -167,7 +168,9 @@ import Bitcoin.Core.RPC.Responses
 import Bitcoin.Core.RPC.Transactions
 import Bitcoin.Core.RPC.Wallet
 import Control.Monad.Trans.Class (lift)
+import qualified Control.Monad.Trans.Reader as TR
 import Control.Monad.Trans.State.Strict (evalStateT, get, put, runStateT)
+import qualified Control.Monad.Trans.State.Strict as TS
 import Data.Aeson (Value)
 import qualified Data.Aeson as Ae
 import Network.HTTP.Types (statusCode)
@@ -176,6 +179,7 @@ import Servant.Bitcoind (
     BitcoindException (..),
     WalletName,
  )
+import qualified Servant.Client.Internal.HttpClient as SCHC
 import Servant.Client.JsonRpc (JsonRpcErr (JsonRpcErr), JsonRpcResponse (Errors))
 
 -- | Convenience function for sending a RPC call to bitcoind
@@ -197,6 +201,49 @@ runBitcoind mgr host port auth =
         . unBitcoindClient
   where
     env = mkBitcoindEnv mgr host port
+
+{- | Use this function to compose 'BitcoindClient' with bracketing functions
+in 'IO'.
+
+@
+lower $ \putIO ->
+   bracket init finalize $ \resource ->
+   putIO $ withResource resource
+@
+-}
+lower ::
+    ( (BitcoindClient a -> IO (Either BitcoindException a)) ->
+      IO (Either BitcoindException a)
+    ) ->
+    BitcoindClient a
+lower k = do
+    authData <- getAuthData
+    env <- getClientEnv
+    state <- getWalletState
+    standUp . k $ tearDown authData env state
+  where
+    tearDown authData env state =
+        fmap consolidateErrors
+            . (`runClientM` env)
+            . runExceptT
+            . (`evalStateT` state)
+            . (`runReaderT` authData)
+            . unBitcoindClient
+    standUp =
+        BitcoindClient
+            . lift
+            . lift
+            . ExceptT
+            . liftIO
+
+getAuthData :: BitcoindClient BasicAuthData
+getAuthData = BitcoindClient TR.ask
+
+getClientEnv :: BitcoindClient ClientEnv
+getClientEnv = BitcoindClient . lift . lift . lift . SCHC.ClientM $ TR.ask
+
+getWalletState :: BitcoindClient (Maybe WalletName)
+getWalletState = BitcoindClient . lift $ TS.get
 
 {- | Convenience function for handling errors without leaving the
  'BitcoindClient' context
