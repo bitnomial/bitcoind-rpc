@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -135,7 +136,7 @@ instance
     toBitcoindClient _ =
         rewriteRpc (Proxy @a)
             . ignorePath
-            . trimArguments
+            . trimArguments Proxy Proxy
             . client
             $ Proxy @(BitcoindRpc m)
       where
@@ -148,12 +149,12 @@ instance
     type TheBitcoindClient (BitcoindWalletEndpoint m a) = RewriteTo a
     toBitcoindClient _ =
         rewriteRpc (Proxy @a)
-            . trimArguments
+            . trimArguments Proxy Proxy
             . client
             $ Proxy @(BitcoindRpc m)
 
-trimArguments :: Client m (BitcoindRpc api) -> Client m (BitcoindRpc api)
-trimArguments f authData path args = f authData path $ dropTrailingNothings args
+trimArguments :: Proxy m -> Proxy api -> Client m (BitcoindRpc api) -> Client m (BitcoindRpc api)
+trimArguments Proxy Proxy f authData path args = f authData path $ dropTrailingNothings args
 
 dropTrailingNothings :: [Value] -> [Value]
 dropTrailingNothings [] = []

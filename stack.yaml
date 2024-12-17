@@ -1,0 +1,9 @@
+resolver: lts-23.0
+packages:
+  - bitcoind-rpc
+  - bitcoind-regtest
+
+extra-deps:
+  - ../../bitcoin-compact-filters
+  - ../../servant-jsonrpc/servant-jsonrpc-client
+  - ../../servant-jsonrpc/servant-jsonrpc
