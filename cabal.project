@@ -11,12 +11,4 @@ package bitcoind-regtest
 source-repository-package
   type: git
   location: https://github.com/bitnomial/bitcoin-compact-filters
-  tag: 2ae18e7c7b66f1cfe60529645fce0c9b6536e986
-
-source-repository-package
-  type: git
-  location: https://github.com/bitnomial/servant-jsonrpc
-  tag: 938b39d0d0d115f1fceb6b5f5125319d19f82c5f
-  subdir:
-    servant-jsonrpc
-    servant-jsonrpc-client
+  tag: 8dbd961e99fa005005be1ebd97d0982d5ab12e9d

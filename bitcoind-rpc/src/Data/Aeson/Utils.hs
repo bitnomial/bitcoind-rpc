@@ -24,8 +24,9 @@ import Bitcoin.Core.RPC.Crypto (globalContext)
 import Control.Monad ((<=<))
 import Data.Aeson (FromJSON (..), Key, ToJSON (..), Value (..), object, withText, (.=))
 import Data.Aeson.Types (Pair)
+import qualified Data.Base64.Types as B64
 import Data.Bifunctor (first)
-import Data.ByteString.Base64 (decodeBase64, encodeBase64)
+import qualified Data.ByteString.Base64 as B64
 import Data.Maybe (catMaybes)
 import Data.Scientific (Scientific)
 import Data.Serialize (Serialize)
@@ -94,17 +95,28 @@ instance (Serialize a) => FromJSON (Base64Encoded a) where
     parseJSON =
         withText "Base64Encoded" $
             either fail (pure . Base64Encoded)
-                . (S.decode <=< first Text.unpack . decodeBase64)
+                . (S.decode <=< first Text.unpack . B64.decodeBase64Untyped)
                 . encodeUtf8
 
 instance (Serialize a) => ToJSON (Base64Encoded a) where
-    toJSON = toJSON . encodeBase64 . S.encode . unBase64Encoded
+    toJSON =
+        toJSON
+            . B64.extractBase64
+            . B64.encodeBase64
+            . S.encode
+            . unBase64Encoded
 
 instance {-# OVERLAPPING #-} ToJSON (Base64Encoded PSBT) where
-    toJSON = toJSON . encodeBase64 . S.runPut . putPSBT globalContext . unBase64Encoded
+    toJSON =
+        toJSON
+            . B64.extractBase64
+            . B64.encodeBase64
+            . S.runPut
+            . putPSBT globalContext
+            . unBase64Encoded
 
 instance {-# OVERLAPPING #-} FromJSON (Base64Encoded PSBT) where
     parseJSON =
         withText "PSBT" $
             either fail (pure . Base64Encoded) . S.runGet (getPSBT globalContext)
-                <=< either (fail . Text.unpack) pure . decodeBase64 . encodeUtf8
+                <=< either (fail . Text.unpack) pure . B64.decodeBase64Untyped . encodeUtf8

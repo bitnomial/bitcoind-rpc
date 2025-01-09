@@ -24,7 +24,8 @@ import Bitcoin.Core.Test.Utils (
     toInput,
  )
 import Control.Monad (replicateM_)
-import Data.ByteString.Base64 (encodeBase64)
+import qualified Data.Base64.Types as B64
+import qualified Data.ByteString.Base64 as B64
 import Data.Functor (void)
 import Data.Maybe (mapMaybe)
 import qualified Data.Serialize as S
@@ -105,4 +106,4 @@ testPSBT = do
   where
     wallet = "testPSBT"
 
-    toBase64 = encodeBase64 . S.runPut . putPSBT globalContext
+    toBase64 = B64.extractBase64 . B64.encodeBase64 . S.runPut . putPSBT globalContext

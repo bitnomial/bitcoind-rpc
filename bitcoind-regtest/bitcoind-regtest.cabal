@@ -1,6 +1,6 @@
 cabal-version:      2.4
 name:               bitcoind-regtest
-version:            0.4.0.0
+version:            0.4.1.0
 synopsis:           A library for working with bitcoin-core regtest networks
 homepage:           https://github.com/bitnomial/bitcoind-rpc
 license:            BSD-3-Clause
@@ -15,7 +15,7 @@ common core
     default-language: Haskell2010
     ghc-options:      -Wall -fno-warn-unused-do-bind
     build-depends:
-        , base >=4.12 && <4.19
+        , base >=4.12 && <4.22
 
 library
     import:         core
@@ -33,16 +33,16 @@ library
           async >=2.0 && <2.3
         , attoparsec >=0.13 && <0.15
         , bitcoind-rpc ^>=0.3
-        , bytestring >=0.10 && <0.12
+        , bytestring >=0.10 && <0.13
         , cereal ^>=0.5
-        , containers >=0.5 && <0.7
+        , containers >=0.5 && <0.8
         , directory ^>=1.3
         , haskoin-core >=1.0.0 && <1.2
         , http-client >=0.6 && <0.8
         , process ^>=1.6
         , servant >=0.19 && <0.21
         , temporary ^>=1.3
-        , text >=1.2 && <2.1
+        , text >=1.2 && <2.2
         , transformers >=0.5 && <0.7
 
 executable bitcoind-rpc-explorer
@@ -51,7 +51,7 @@ executable bitcoind-rpc-explorer
     hs-source-dirs: rpc-explorer/
     build-depends:
           bitcoind-regtest
-        , bytestring >=0.10 && <0.12
+        , bytestring >=0.10 && <0.13
         , optparse-applicative >=0.14 && <0.20
         , process ^>=1.6
         , servant >=0.19 && <0.21
@@ -69,7 +69,7 @@ executable bitcoind-regtest-autominer
         , haskoin-core >=1.0.0 && <1.2
         , http-client >=0.6 && <0.8
         , optparse-applicative >=0.14 && <0.20
-        , text >=1.2 && <2.1
+        , text >=1.2 && <2.2
 
 test-suite bitcoind-rpc-tests
     import:         core
@@ -86,15 +86,15 @@ test-suite bitcoind-rpc-tests
 
     build-depends:
           async >=2.0 && <2.3
-        , base64 ^>=0.4
+        , base64 ^>=1.0
         , bitcoind-regtest
         , bitcoind-rpc ^>=0.3
         , cereal ^>=0.5
-        , containers ^>=0.6
+        , containers >=0.6 && <0.8
         , directory ^>=1.3
         , haskoin-core >=1.0.0 && <1.2
         , http-client >=0.6 && <0.8
-        , tasty >=1.2 && <1.5
+        , tasty >=1.2 && <1.6
         , tasty-hunit ^>=0.10
         , temporary ^>=1.3
-        , text >=1.2 && <2.1
+        , text >=1.2 && <2.2

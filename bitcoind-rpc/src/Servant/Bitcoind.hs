@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -55,13 +56,14 @@ import Data.Kind (Type)
 import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import GHC.TypeLits (KnownSymbol, Symbol)
-import Servant.API (CaptureAll, (:<|>) (..), (:>))
+import Servant.API (CaptureAll, JSON, (:<|>) (..), (:>))
 import Servant.API.BasicAuth (BasicAuth, BasicAuthData)
-import Servant.Client (Client, ClientError, ClientM, client)
+import Servant.Client (ClientError, ClientM, client)
 import Servant.Client.JsonRpc (
     JsonRpc,
     JsonRpcErr (..),
     JsonRpcResponse (..),
+    RawJsonRpc,
  )
 
 -- | Exceptions resulting from interacting with bitcoind
@@ -152,7 +154,7 @@ instance
             . client
             $ Proxy @(BitcoindRpc m)
 
-trimArguments :: Client m (BitcoindRpc api) -> Client m (BitcoindRpc api)
+trimArguments :: (BasicAuthData -> [Text] -> [Value] -> c) -> BasicAuthData -> [Text] -> [Value] -> c
 trimArguments f authData path args = f authData path $ dropTrailingNothings args
 
 dropTrailingNothings :: [Value] -> [Value]
@@ -173,7 +175,7 @@ instance
 type BitcoindRpc m =
     BasicAuth "bitcoind" ()
         :> CaptureAll "wallet" Text
-        :> JsonRpc m [Value] String Value
+        :> RawJsonRpc JSON (JsonRpc m [Value] String Value)
 
 type WalletName = Text
 
