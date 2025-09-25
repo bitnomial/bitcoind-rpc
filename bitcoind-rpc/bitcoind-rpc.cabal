@@ -33,7 +33,7 @@ library
 
     build-depends:
           aeson >=2.0 && <2.3
-        , base >=4.12 && <4.22
+        , base >=4.12 && <5
         , base64 ^>=1.0
         , bytestring >=0.10 && <0.13
         , bitcoin-compact-filters ^>=0.1
